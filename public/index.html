@@ -87,12 +87,14 @@
               <path d="M4 22v4a2 2 0 002 2h20a2 2 0 002-2v-4" stroke="currentColor" stroke-width="2"
                 stroke-linecap="round" />
             </svg>
-            <strong>Drop video files here</strong>
-            <span>MP4, MOV, MKV, AVI, WEBM</span>
+            <strong>Thả video vào đây</strong>
+            <span>hoặc</span>
+            <button id="dropZoneBtn" class="btn-sm" type="button">Chọn file…</button>
+            <span class="drop-hint">MP4, MOV, MKV, AVI, WEBM</span>
           </div>
 
           <div class="manual-add">
-            <input id="manualPath" type="text" placeholder="Paste absolute video path…">
+            <input id="manualPath" type="text" placeholder="Dán đường dẫn tuyệt đối…">
             <button id="addPathBtn" class="btn-sm" title="Add path">Add</button>
           </div>
         </section>
@@ -129,10 +131,10 @@
           <section class="empty-shell">
             <div class="empty-hero">
               <p class="panel-kicker">Desktop-First Workflow</p>
-              <h1>Clean fixed-corner watermarks and export polished copies locally.</h1>
-              <p>Load one or many clips, inspect the frame, tune the crop or replacement logo, then export new files without uploading the source footage anywhere.</p>
+              <h1>Xóa logo cố định trực tiếp trên video mà không cắt khung hình.</h1>
+              <p>Thêm một hay nhiều video, khoanh đúng vùng watermark trên preview, rồi xuất file mới ngay trên máy mà không phải upload nguồn.</p>
               <div class="hero-actions">
-                <button id="emptyBrowseBtn" class="hero-btn" type="button">Choose Videos</button>
+                <button id="emptyBrowseBtn" class="hero-btn" type="button">Chọn video…</button>
                 <span class="hero-note">Uses ffmpeg and ffprobe on your machine.</span>
               </div>
             </div>
@@ -146,12 +148,12 @@
               <article class="empty-card">
                 <span class="empty-card-index">2</span>
                 <h2>Inspect</h2>
-                <p>Review the generated preview, confirm orientation, and reset to the matching auto preset.</p>
+                <p>Kiểm tra preview, dùng preset tự động hoặc kéo khung đúng vào vùng logo cần xoá.</p>
               </article>
               <article class="empty-card">
                 <span class="empty-card-index">3</span>
                 <h2>Export</h2>
-                <p>Run the queue, then play, download, or open the output folder immediately.</p>
+                <p>Chạy hàng đợi rồi kiểm tra kết quả ngay, khung hình vẫn giữ nguyên kích thước ban đầu.</p>
               </article>
             </div>
           </section>
@@ -167,7 +169,7 @@
               </div>
               <div class="job-hero-pills">
                 <span id="heroStatus" class="hero-pill hero-pill-status">Pending</span>
-                <span id="heroMode" class="hero-pill hero-pill-muted">Auto Crop</span>
+                <span id="heroMode" class="hero-pill hero-pill-muted">Xóa logo trực tiếp</span>
               </div>
             </section>
 
@@ -208,6 +210,11 @@
                 <section class="preview-section">
                   <div class="preview-frame" id="previewFrame">
                     <img id="previewImage" alt="Preview" hidden>
+                    <div id="selectionLayer" class="selection-layer" hidden>
+                      <div id="selectionBox" class="selection-box" hidden>
+                        <span class="selection-tag">Logo Area</span>
+                      </div>
+                    </div>
                     <img id="logoOverlay" class="logo-overlay" alt="" hidden draggable="false">
                     <p id="previewPlaceholder" class="preview-ph">Loading preview…</p>
                   </div>
@@ -236,13 +243,20 @@
 
                 <section class="settings-section">
                   <div class="mode-tabs">
-                    <button class="mode-tab active" data-mode="crop">
+                    <button class="mode-tab active" data-mode="delogo">
+                      <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+                        <rect x="1.5" y="1.5" width="11" height="11" rx="2.5" stroke="currentColor" stroke-width="1.4" fill="none" />
+                        <path d="M4.2 9.8l5.6-5.6M4.2 4.2l5.6 5.6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
+                      </svg>
+                      <span>Remove Logo</span>
+                      <span class="mode-chip mode-chip-good">Recommended</span>
+                    </button>
+                    <button class="mode-tab" data-mode="crop">
                       <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
                         <path d="M1 4V1h3M10 1h3v3M13 10v3h-3M4 13H1v-3" stroke="currentColor" stroke-width="1.4"
                           stroke-linecap="round" stroke-linejoin="round" fill="none" />
                       </svg>
-                      <span>Auto Crop</span>
-                      <span class="mode-chip mode-chip-good">Recommended</span>
+                      <span>Crop Edge</span>
                     </button>
                     <button class="mode-tab" data-mode="overlay">
                       <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
@@ -254,9 +268,40 @@
                     </button>
                   </div>
 
-                  <p id="modeNote" class="mode-note mode-note-good">Best quality for fixed corner watermarks. Trims a small edge and scales back to the original size.</p>
+                  <p id="modeNote" class="mode-note mode-note-good">Only the selected logo area is processed. The output keeps the original frame size.</p>
 
-                  <div id="cropSettings" class="fields-group">
+                  <div id="delogoSettings" class="fields-group">
+                    <div class="field-row">
+                      <label class="field"><span>X</span><input id="delogoX" type="number" min="0" value="0"></label>
+                      <label class="field"><span>Y</span><input id="delogoY" type="number" min="0" value="0"></label>
+                      <label class="field"><span>W</span><input id="delogoW" type="number" min="1" value="1"></label>
+                      <label class="field"><span>H</span><input id="delogoH" type="number" min="1" value="1"></label>
+                    </div>
+                    <p class="hint hint-good">Kéo trực tiếp trên preview để khoanh vùng logo cần xoá. Chỉ vùng này sẽ bị xử lý.</p>
+                    <div class="field-row delogo-method-row">
+                      <label class="field">
+                        <span>Phương pháp xoá</span>
+                        <select id="delogoMethod">
+                          <option value="reconstruct">Khôi phục nền (ShiftMap)</option>
+                          <option value="blur">Làm mờ (Gaussian Blur)</option>
+                        </select>
+                      </label>
+                    </div>
+                    <div class="preset-btn-row">
+                      <button id="delogoPresetBtn" class="btn-ghost" type="button">Reset to auto preset</button>
+                      <button id="scanWatermarkBtn" class="btn-ghost btn-scan" type="button">
+                        <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                          <circle cx="6" cy="6" r="4.5" stroke="currentColor" stroke-width="1.4"/>
+                          <path d="M9.5 9.5L13 13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                          <path d="M4 6h4M6 4v4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+                        </svg>
+                        Scan Watermark
+                      </button>
+                    </div>
+                    <p id="scanStatus" class="scan-status" hidden></p>
+                  </div>
+
+                  <div id="cropSettings" class="fields-group" hidden>
                     <div class="field-row">
                       <label class="field"><span>Crop Right (px)</span><input id="cropRight" type="number" min="0" value="240"></label>
                       <label class="field"><span>Crop Bottom (px)</span><input id="cropBottom" type="number" min="0" value="120"></label>

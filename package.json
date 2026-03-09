@@ -34,6 +34,9 @@
       "server.js",
       "package.json"
     ],
+    "extraResources": [
+      { "from": "scripts", "to": "scripts" }
+    ],
     "asar": true,
     "asarUnpack": [
       "node_modules/ffmpeg-static/**/*",

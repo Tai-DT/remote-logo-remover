@@ -1,5 +1,5 @@
 /* ── State ──────────────────────────────────────────────── */
-const S = { jobs: [], selectedId: null, isProcessing: false, logoInteraction: null, doneIds: new Set() };
+const S = { jobs: [], selectedId: null, isProcessing: false, interaction: null, logoInteraction: null, doneIds: new Set() };
 const isElectron = !!(window.electronAPI && window.electronAPI.isElectron);
 
 /* ── DOM ───────────────────────────────────────────────── */
@@ -10,7 +10,7 @@ const el = {
   dropZone: $("dropZone"), queueList: $("queueList"), queueCount: $("queueCount"),
   queueReadyCount: $("queueReadyCount"), queueDoneCount: $("queueDoneCount"), queueIssueCount: $("queueIssueCount"),
   manualPath: $("manualPath"), addPathBtn: $("addPathBtn"),
-  emptyBrowseBtn: $("emptyBrowseBtn"),
+  emptyBrowseBtn: $("emptyBrowseBtn"), dropZoneBtn: $("dropZoneBtn"),
   overallProgress: $("overallProgress"), overallFill: $("overallFill"), overallText: $("overallText"),
   emptyState: $("emptyState"), jobDetail: $("jobDetail"),
   jobTitle: $("jobTitle"), jobSubtitle: $("jobSubtitle"),
@@ -19,10 +19,14 @@ const el = {
   stageImport: $("stageImport"), stageTune: $("stageTune"), stageExport: $("stageExport"),
   previewFrame: $("previewFrame"), previewImage: $("previewImage"),
   previewPlaceholder: $("previewPlaceholder"),
+  selectionLayer: $("selectionLayer"), selectionBox: $("selectionBox"),
   logoOverlay: $("logoOverlay"),
   metaText: $("metaText"),
-  cropSettings: $("cropSettings"), overlaySettings: $("overlaySettings"),
+  delogoSettings: $("delogoSettings"), cropSettings: $("cropSettings"), overlaySettings: $("overlaySettings"),
   modeNote: $("modeNote"),
+  delogoX: $("delogoX"), delogoY: $("delogoY"), delogoW: $("delogoW"), delogoH: $("delogoH"),
+  delogoMethod: $("delogoMethod"),
+  delogoPresetBtn: $("delogoPresetBtn"), scanWatermarkBtn: $("scanWatermarkBtn"), scanStatus: $("scanStatus"),
   cropRight: $("cropRight"), cropBottom: $("cropBottom"), scaleOutput: $("scaleOutput"), cropPresetBtn: $("cropPresetBtn"),
   logoPath: $("logoPath"), browseLogoBtn: $("browseLogoBtn"),
   logoX: $("logoX"), logoY: $("logoY"), logoW: $("logoW"), logoH: $("logoH"),
@@ -39,7 +43,7 @@ const modeTabs = document.querySelectorAll(".mode-tab");
 
 /* ── Helpers ───────────────────────────────────────────── */
 function clamp(v, min, max) { return Math.min(Math.max(v, min), max); }
-function normalizeMode(mode) { return mode === "overlay" ? "overlay" : "crop"; }
+function normalizeMode(mode) { return ["delogo", "crop", "overlay"].includes(mode) ? mode : "delogo"; }
 function basename(p) { return p.split(/[\\/]/).pop(); }
 function escapeHtml(v) {
   return String(v ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -61,7 +65,13 @@ function getStatusLabel(status) {
     cancelled: "Đã dừng",
   }[status] || status;
 }
-function getModeLabel(mode) { return normalizeMode(mode) === "overlay" ? "Chèn logo" : "Cắt tự động"; }
+function getModeLabel(mode) {
+  return {
+    delogo: "Xóa logo trực tiếp",
+    crop: "Cắt mép video",
+    overlay: "Chèn logo",
+  }[normalizeMode(mode)] || "Xóa logo trực tiếp";
+}
 function getOrientationLabel(meta) {
   if (!meta) return "";
   return meta.width >= meta.height ? "Ngang" : "Dọc";
@@ -155,26 +165,36 @@ async function api(method, url, body) {
 function getSelectedJob() { return S.jobs.find(j => j.id === S.selectedId) || null; }
 function getCurrentMode() {
   const active = document.querySelector(".mode-tab.active");
-  return normalizeMode(active ? active.dataset.mode : "crop");
+  return normalizeMode(active ? active.dataset.mode : "delogo");
 }
 function updateModeNote(mode) {
   const notes = {
-    crop: {
-      text: "Chất lượng tốt nhất cho watermark cố định ở góc. Cắt một phần mép nhỏ rồi phóng lại về kích thước gốc.",
+    delogo: {
+      text: "Chỉ xử lý vùng logo đã chọn bằng bộ lọc delogo của ffmpeg, giữ nguyên kích thước khung hình.",
       cls: "mode-note mode-note-good",
+    },
+    crop: {
+      text: "Chế độ dự phòng. Cắt bớt mép phải hoặc mép dưới rồi phóng lại về kích thước gốc, nên vẫn làm thay đổi nội dung hình.",
+      cls: "mode-note",
     },
     overlay: {
       text: "Dùng chế độ này khi bạn muốn đặt logo hoặc nhận diện thương hiệu mới đè lên video.",
       cls: "mode-note",
     },
   };
-  const current = notes[mode] || notes.crop;
+  const current = notes[mode] || notes.delogo;
   el.modeNote.textContent = current.text;
   el.modeNote.className = current.cls;
 }
 function collectCurrentSettings({ includeOutputPath = false, includeOutputDir = false } = {}) {
   const settings = {
     mode: normalizeMode(getCurrentMode()),
+    delogoX: Number(el.delogoX.value),
+    delogoY: Number(el.delogoY.value),
+    delogoW: Number(el.delogoW.value),
+    delogoH: Number(el.delogoH.value),
+    delogoMethod: el.delogoMethod ? el.delogoMethod.value : "reconstruct",
+    delogoMethod: el.delogoMethod ? el.delogoMethod.value : 'reconstruct',
     cropRight: Number(el.cropRight.value),
     cropBottom: Number(el.cropBottom.value),
     scaleOutput: el.scaleOutput.checked,
@@ -372,10 +392,12 @@ function renderDetail() {
   el.cropRight.value = s.cropRight ?? j.cropPreset?.right ?? 0;
   el.cropBottom.value = s.cropBottom ?? j.cropPreset?.bottom ?? 0;
   el.scaleOutput.checked = s.scaleOutput !== false;
-  if (el.delogoX) el.delogoX.value = s.delogoX || 0;
-  if (el.delogoY) el.delogoY.value = s.delogoY || 0;
-  if (el.delogoW) el.delogoW.value = s.delogoW || 0;
-  if (el.delogoH) el.delogoH.value = s.delogoH || 0;
+  if (el.delogoX) el.delogoX.value = s.delogoX ?? j.delogoPreset?.x ?? 0;
+  if (el.delogoY) el.delogoY.value = s.delogoY ?? j.delogoPreset?.y ?? 0;
+  if (el.delogoW) el.delogoW.value = s.delogoW ?? j.delogoPreset?.w ?? 1;
+  if (el.delogoH) el.delogoH.value = s.delogoH ?? j.delogoPreset?.h ?? 1;
+  if (el.delogoMethod) el.delogoMethod.value = s.delogoMethod || "reconstruct";
+  if (el.delogoMethod) el.delogoMethod.value = s.delogoMethod || 'reconstruct';
   el.logoPath.value = s.logoPath || "";
   el.logoX.value = s.logoX || 0;
   el.logoY.value = s.logoY || 0;
@@ -403,11 +425,9 @@ function renderDetail() {
 function setActiveMode(mode) {
   mode = normalizeMode(mode);
   modeTabs.forEach(t => t.classList.toggle("active", t.dataset.mode === mode));
+  el.delogoSettings.hidden = mode !== "delogo";
   el.cropSettings.hidden = mode !== "crop";
-  if (el.delogoSettings) el.delogoSettings.hidden = true;
   el.overlaySettings.hidden = mode !== "overlay";
-  if (el.selectionLayer) el.selectionLayer.hidden = true;
-  el.logoOverlay.hidden = mode !== "overlay";
   updateModeNote(mode);
   renderSelectionBox();
   renderLogoOverlay();
@@ -443,17 +463,47 @@ function toDisplay(sel) {
 }
 function renderSelectionBox() {
   if (!el.selectionLayer || !el.selectionBox) return;
-  el.selectionLayer.hidden = true;
-  el.selectionBox.hidden = true;
+  if (getCurrentMode() !== "delogo" || !hasPreview()) {
+    el.selectionLayer.hidden = true;
+    el.selectionBox.hidden = true;
+    return;
+  }
+  const img = el.previewImage;
+  Object.assign(el.selectionLayer.style, {
+    left: `${img.offsetLeft}px`,
+    top: `${img.offsetTop}px`,
+    width: `${img.clientWidth}px`,
+    height: `${img.clientHeight}px`,
+  });
+  el.selectionLayer.hidden = false;
+  const d = toDisplay({
+    x: Number(el.delogoX.value || 0),
+    y: Number(el.delogoY.value || 0),
+    w: Number(el.delogoW.value || 0),
+    h: Number(el.delogoH.value || 0),
+  });
+  if (!d || d.width <= 0 || d.height <= 0) {
+    el.selectionBox.hidden = true;
+    return;
+  }
+  el.selectionBox.hidden = false;
+  Object.assign(el.selectionBox.style, {
+    left: `${d.left}px`,
+    top: `${d.top}px`,
+    width: `${d.width}px`,
+    height: `${d.height}px`,
+  });
+  el.selectionBox.dataset.size = `${Math.round(d.width)}×${Math.round(d.height)}`;
 }
 
-// Pointer handlers for legacy delogo overlay (kept inert after crop-only UI)
+// Pointer handlers for legacy delogo overlay (kept active for direct logo removal)
 function insideBox(cx, cy) {
   const d = toDisplay({ x: Number(el.delogoX?.value || 0), y: Number(el.delogoY?.value || 0), w: Number(el.delogoW?.value || 0), h: Number(el.delogoH?.value || 0) });
   if (!d) return false;
   const r = getPreviewRect(), lx = cx - r.left, ly = cy - r.top;
   return lx >= d.left && lx <= d.left + d.width && ly >= d.top && ly <= d.top + d.height;
 }
+
 if (el.selectionLayer && el.selectionBox) {
   el.selectionLayer.hidden = true;
   el.selectionBox.hidden = true;
@@ -562,15 +612,26 @@ async function removeJob(id) {
 }
 
 /* ── Event Listeners ───────────────────────────────────── */
-// Add / Browse
-el.addBtn.addEventListener("click", () => el.dropZone.click());
-el.emptyBrowseBtn.addEventListener("click", () => el.dropZone.click());
-el.browseBtn.addEventListener("click", async () => {
+// Native file picker helper
+async function nativeBrowse() {
   if (isElectron) {
     const paths = await window.electronAPI.openFileDialog();
     if (paths && paths.length) await addPaths(paths);
-  } else { el.manualPath.focus(); }
-});
+    return;
+  }
+  try {
+    const res = await fetch("/api/browse-dialog");
+    const data = await res.json();
+    if (data.error) { setStatus(data.error, "err"); return; }
+    if (data.paths && data.paths.length) await addPaths(data.paths);
+  } catch (e) { setStatus(e.message, "err"); }
+}
+
+// Add / Browse
+el.addBtn.addEventListener("click", nativeBrowse);
+el.emptyBrowseBtn.addEventListener("click", nativeBrowse);
+if (el.dropZoneBtn) el.dropZoneBtn.addEventListener("click", e => { e.stopPropagation(); nativeBrowse(); });
+el.browseBtn.addEventListener("click", nativeBrowse);
 el.addPathBtn.addEventListener("click", async () => {
   const p = el.manualPath.value.trim();
   if (p) { await addPaths([p]); el.manualPath.value = ""; }
@@ -621,6 +682,11 @@ el.clearBtn.addEventListener("click", async () => {
 });
 el.applyAllBtn.addEventListener("click", async () => {
   const settings = collectCurrentSettings({ includeOutputDir: true });
+  const j = getSelectedJob();
+  if (j && j.metadata) {
+    settings.sourceWidth = j.metadata.width;
+    settings.sourceHeight = j.metadata.height;
+  }
   try { const r = await api("POST", "/api/jobs/apply-settings", settings); setStatus(`Đã áp dụng cho ${r.count} video`, "ok"); } catch (e) { setStatus(e.message, "err"); }
 });
 
@@ -670,7 +736,16 @@ el.autoDownload.addEventListener("change", () => {
 
 // Mode tabs
 modeTabs.forEach(t => t.addEventListener("click", () => {
-  setActiveMode(t.dataset.mode);
+  const mode = normalizeMode(t.dataset.mode);
+  const j = getSelectedJob();
+  setActiveMode(mode);
+  if (j && mode === "delogo" && j.delogoPreset && (!Number(el.delogoW.value) || !Number(el.delogoH.value))) {
+    el.delogoX.value = j.delogoPreset.x;
+    el.delogoY.value = j.delogoPreset.y;
+    el.delogoW.value = j.delogoPreset.w;
+    el.delogoH.value = j.delogoPreset.h;
+    renderSelectionBox();
+  }
   debounceSave();
 }));
 
@@ -701,6 +776,33 @@ el.cropPresetBtn.addEventListener("click", () => {
 if (el.delogoPresetBtn) el.delogoPresetBtn.addEventListener("click", () => {
   const j = getSelectedJob();
   if (j && j.delogoPreset) { el.delogoX.value = j.delogoPreset.x; el.delogoY.value = j.delogoPreset.y; el.delogoW.value = j.delogoPreset.w; el.delogoH.value = j.delogoPreset.h; renderSelectionBox(); debounceSave(); }
+});
+
+if (el.scanWatermarkBtn) el.scanWatermarkBtn.addEventListener("click", async () => {
+  const j = getSelectedJob();
+  if (!j || !j.inputPath) return;
+  el.scanWatermarkBtn.classList.add("scanning");
+  el.scanWatermarkBtn.textContent = "Đang quét…";
+  el.scanStatus.hidden = true;
+  try {
+    const result = await api("POST", "/api/detect-watermark", { inputPath: j.inputPath });
+    el.delogoX.value = result.x;
+    el.delogoY.value = result.y;
+    el.delogoW.value = result.w;
+    el.delogoH.value = result.h;
+    renderSelectionBox();
+    debounceSave();
+    el.scanStatus.className = "scan-status";
+    el.scanStatus.textContent = `Đã tìm thấy watermark: x=${result.x} y=${result.y} w=${result.w} h=${result.h} (phân tích ${result.framesAnalyzed} frame)`;
+    el.scanStatus.hidden = false;
+  } catch (e) {
+    el.scanStatus.className = "scan-status err";
+    el.scanStatus.textContent = `Quét thất bại: ${e.message}`;
+    el.scanStatus.hidden = false;
+  } finally {
+    el.scanWatermarkBtn.classList.remove("scanning");
+    el.scanWatermarkBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden="true"><circle cx="6" cy="6" r="4.5" stroke="currentColor" stroke-width="1.4"/><path d="M9.5 9.5L13 13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M4 6h4M6 4v4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg> Scan Watermark`;
+  }
 });
 
 // Resize

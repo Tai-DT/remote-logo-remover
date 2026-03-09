@@ -37,7 +37,10 @@ function scaleFromBase(v, src, base) { return Math.max(1, Math.round((v * src) /
 function clampInt(v, fb) { const p = Number.parseInt(v, 10); return Number.isFinite(p) ? p : fb; }
 function isUnset(v) { return v === null || v === undefined; }
 function getOrientation(w, h) { return w >= h ? "landscape" : "portrait"; }
-function normalizeJobMode(mode) { return mode === "overlay" ? "overlay" : "crop"; }
+function normalizeJobMode(mode) {
+  const normalized = String(mode || "").trim().toLowerCase();
+  return ["delogo", "crop", "overlay"].includes(normalized) ? normalized : "delogo";
+}
 
 const DOWNLOADABLE_EXTENSIONS = new Set([".dmg", ".zip", ".exe", ".appimage", ".deb"]);
 const SHOWCASE_FIXTURES = [
@@ -57,22 +60,41 @@ const SHOWCASE_FIXTURES = [
   },
 ];
 
+// Veo watermark "Veo" — detected via pixel-level analysis of real frames
+// car.jpg (3840x2160):  x=3591 y=2012 w=220 h=103
+// girl.jpg (2160x3840): x=2016 y=3572 w=96  h=212
 const PRESET_PROFILES = [
+  {
+    id: "landscape-1080p",
+    label: "Ngang 1920x1080",
+    width: 1920,
+    height: 1080,
+    crop: { right: 120, bottom: 60, scaleOutput: true },
+    delogo: { x: 1795, y: 1006, w: 110, h: 52 },
+  },
   {
     id: "landscape-4k",
     label: "Ngang 3840x2160",
     width: 3840,
     height: 2160,
     crop: { right: 240, bottom: 120, scaleOutput: true },
-    delogo: { x: 3535, y: 1970, w: 300, h: 170 },
+    delogo: { x: 3591, y: 2012, w: 220, h: 103 },
+  },
+  {
+    id: "portrait-1080p",
+    label: "Dọc 1080x1920",
+    width: 1080,
+    height: 1920,
+    crop: { right: 60, bottom: 120, scaleOutput: true },
+    delogo: { x: 1008, y: 1786, w: 48, h: 106 },
   },
   {
     id: "portrait-4k",
     label: "Dọc 2160x3840",
     width: 2160,
     height: 3840,
-    crop: { right: 280, bottom: 180, scaleOutput: true },
-    delogo: { x: 1830, y: 3600, w: 315, h: 190 },
+    crop: { right: 120, bottom: 240, scaleOutput: true },
+    delogo: { x: 2016, y: 3572, w: 96, h: 212 },
   },
 ];
 
@@ -251,6 +273,15 @@ async function generatePreview(inputPath, dur, previewDir) {
 
 function buildVideoFilter(mode, body, meta) {
   mode = normalizeJobMode(mode);
+  if (mode === "delogo") {
+    const x = clampInt(body.delogoX, 0), y = clampInt(body.delogoY, 0);
+    const w = clampInt(body.delogoW, 0), h = clampInt(body.delogoH, 0);
+    if (w <= 0 || h <= 0) throw new Error("Vùng xoá logo phải có chiều rộng và chiều cao lớn hơn 0.");
+    if (x < 0 || y < 0 || x + w > meta.width || y + h > meta.height) {
+      throw new Error("Vùng xoá logo vượt ra ngoài khung hình video.");
+    }
+    return `delogo=x=${x}:y=${y}:w=${w}:h=${h}:show=0`;
+  }
   if (mode === "crop") {
     const cr = clampInt(body.cropRight, 0), cb = clampInt(body.cropBottom, 0);
     const cw = meta.width - cr, ch = meta.height - cb;
@@ -282,6 +313,7 @@ const jobOrder = [];
 let queueRunning = false;
 let currentChild = null;
 let _previewDir = null;
+let _baseDir = null;
 
 function sanitizeJob(j) {
   if (!j) return null;
@@ -295,7 +327,7 @@ function createJob(inputPath, settings) {
     id, inputPath, outputPath: makeOutputPath(inputPath),
     status: "pending", progress: 0,
     metadata: null, previewUrl: null, cropPreset: null, delogoPreset: null, presetProfile: null,
-    settings: { mode: "crop", crf: 16, preset: "slow", scaleOutput: true, cropRight: null, cropBottom: null, delogoX: null, delogoY: null, delogoW: null, delogoH: null, logoPath: "", logoX: 0, logoY: 0, logoW: 200, logoH: 200, logoOpacity: 1, ...settings, mode: normalizeJobMode(settings.mode) },
+    settings: { mode: "delogo", crf: 16, preset: "slow", scaleOutput: true, cropRight: null, cropBottom: null, delogoX: null, delogoY: null, delogoW: null, delogoH: null, delogoMethod: "reconstruct", logoPath: "", logoX: 0, logoY: 0, logoW: 200, logoH: 200, logoOpacity: 1, ...settings, mode: normalizeJobMode(settings.mode) },
     error: null, result: null, addedAt: Date.now(),
   };
   jobs.set(id, job);
@@ -334,6 +366,20 @@ async function probeJob(job) {
     job.cropPreset = presetBundle.cropPreset;
     job.delogoPreset = presetBundle.delogoPreset;
     job.presetProfile = presetBundle.presetProfile;
+    if (job.settings.mode === "delogo") {
+      const dx = clampInt(job.settings.delogoX, 0);
+      const dy = clampInt(job.settings.delogoY, 0);
+      const dw = clampInt(job.settings.delogoW, 0);
+      const dh = clampInt(job.settings.delogoH, 0);
+      const missing = isUnset(job.settings.delogoX) || isUnset(job.settings.delogoY) || isUnset(job.settings.delogoW) || isUnset(job.settings.delogoH);
+      const outOfBounds = !missing && (dw <= 0 || dh <= 0 || dx + dw > meta.width || dy + dh > meta.height);
+      if (missing || outOfBounds) {
+        job.settings.delogoX = job.delogoPreset.x;
+        job.settings.delogoY = job.delogoPreset.y;
+        job.settings.delogoW = job.delogoPreset.w;
+        job.settings.delogoH = job.delogoPreset.h;
+      }
+    }
     if (job.settings.mode === "crop" && (isUnset(job.settings.cropRight) || isUnset(job.settings.cropBottom))) {
       job.settings.cropRight = job.cropPreset.right;
       job.settings.cropBottom = job.cropPreset.bottom;
@@ -374,15 +420,43 @@ async function processJob(job) {
   try {
     const ffmpegPath = resolveExecutable("ffmpeg");
     await fsp.mkdir(path.dirname(job.outputPath), { recursive: true });
+    let cmd = ffmpegPath;
     let args;
     if (job.settings.mode === "overlay") {
       args = buildOverlayArgs(job.inputPath, job.outputPath, job.settings);
+    } else if (job.settings.mode === "delogo") {
+      // Use OpenCV Telea inpainting (reconstructs background, not just blurs)
+      const pythonBin  = _baseDir ? resolvePythonBin(_baseDir) : null;
+      const scriptPath = _baseDir ? path.join(_baseDir, "scripts", "inpaint_video.py") : null;
+      if (pythonBin && scriptPath) {
+        const scriptArg = JSON.stringify({
+          input:       job.inputPath,
+          output:      job.outputPath,
+          x:           clampInt(job.settings.delogoX, 0),
+          y:           clampInt(job.settings.delogoY, 0),
+          w:           Math.max(1, clampInt(job.settings.delogoW, 0)),
+          h:           Math.max(1, clampInt(job.settings.delogoH, 0)),
+          ffmpeg:      ffmpegPath,
+          videoWidth:  job.metadata.width,
+          videoHeight: job.metadata.height,
+          fps:         job.metadata.frameRate || "30",
+          preset:      isNonEmptyString(job.settings.preset) ? job.settings.preset : "slow",
+          crf:         clampInt(job.settings.crf, 16),
+          method:      job.settings.delogoMethod === "blur" ? "blur" : "reconstruct",
+        });
+        cmd  = pythonBin;
+        args = [scriptPath, scriptArg];
+      } else {
+        // Fallback: ffmpeg delogo
+        const filter = buildVideoFilter("delogo", job.settings, job.metadata);
+        args = buildFfmpegArgs(job.inputPath, job.outputPath, filter, job.settings);
+      }
     } else {
       const filter = buildVideoFilter(job.settings.mode, job.settings, job.metadata);
       args = buildFfmpegArgs(job.inputPath, job.outputPath, filter, job.settings);
     }
     await new Promise((resolve, reject) => {
-      const child = spawn(ffmpegPath, args, { stdio: ["ignore", "pipe", "pipe"] });
+      const child = spawn(cmd, args, { stdio: ["ignore", "pipe", "pipe"] });
       job._process = child;
       currentChild = child;
       let stderr = "";
@@ -399,7 +473,7 @@ async function processJob(job) {
       child.on("close", code => {
         currentChild = null;
         if (code === 0) { job.progress = 100; resolve({ stderr }); }
-        else reject(new Error(stderr.trim() || `ffmpeg exited with code ${code}`));
+        else reject(new Error(stderr.trim() || `Process exited with code ${code}`));
       });
     });
     job.status = "done";
@@ -435,6 +509,20 @@ function stopQueue() {
   }
 }
 
+/* ── Python venv resolver ──────────────────────────────── */
+
+function resolvePythonBin(baseDir) {
+  const candidates = [
+    path.join(baseDir, ".venv", "bin", "python"),
+    path.join(baseDir, ".venv", "bin", "python3"),
+  ];
+  const { execSync } = require("child_process");
+  for (const p of candidates) {
+    try { const fs = require("fs"); fs.accessSync(p, require("fs").constants.X_OK); return p; } catch { }
+  }
+  return "python3";
+}
+
 /* ── Express App ───────────────────────────────────────── */
 
 function createServerApp(options = {}) {
@@ -444,6 +532,7 @@ function createServerApp(options = {}) {
   const previewDir = path.join(runtimeDir, "previews");
   const publicDir = options.publicDir || path.join(baseDir, "public");
   _previewDir = previewDir;
+  _baseDir = baseDir;
 
   app.use(express.json({ limit: "1mb" }));
   app.use("/previews", express.static(previewDir));
@@ -454,7 +543,7 @@ function createServerApp(options = {}) {
   app.post("/api/jobs/add", async (req, res) => {
     try {
       const paths = req.body.paths || [];
-      const mode = normalizeJobMode(req.body.mode || "crop");
+      const mode = normalizeJobMode(req.body.mode || "delogo");
       const settings = {
         mode,
         crf: clampInt(req.body.crf, 16),
@@ -506,11 +595,36 @@ function createServerApp(options = {}) {
     const settings = { ...req.body };
     if ("mode" in settings) settings.mode = normalizeJobMode(settings.mode);
     const outputDir = resolveUserPath(settings.outputDir);
+    const srcW = clampInt(req.body.sourceWidth, 0) || 0;
+    const srcH = clampInt(req.body.sourceHeight, 0) || 0;
     delete settings.outputDir;
+    delete settings.sourceWidth;
+    delete settings.sourceHeight;
     let count = 0;
     for (const j of jobs.values()) {
       if (j.status === "ready" || j.status === "pending") {
-        Object.assign(j.settings, settings);
+        const jobSettings = { ...settings };
+        // Adapt delogo coordinates to each job's own video dimensions
+        if (settings.mode === "delogo" && srcW > 0 && srcH > 0 && j.metadata) {
+          const srcOri = getOrientation(srcW, srcH);
+          const dstOri = getOrientation(j.metadata.width, j.metadata.height);
+          if (srcOri !== dstOri) {
+            // Different orientation: restore from the job's own auto-detected preset
+            if (j.delogoPreset) {
+              jobSettings.delogoX = j.delogoPreset.x;
+              jobSettings.delogoY = j.delogoPreset.y;
+              jobSettings.delogoW = j.delogoPreset.w;
+              jobSettings.delogoH = j.delogoPreset.h;
+            }
+          } else if (j.metadata.width !== srcW || j.metadata.height !== srcH) {
+            // Same orientation, different resolution: scale proportionally
+            if (!isUnset(jobSettings.delogoX)) jobSettings.delogoX = Math.round(jobSettings.delogoX * j.metadata.width / srcW);
+            if (!isUnset(jobSettings.delogoY)) jobSettings.delogoY = Math.round(jobSettings.delogoY * j.metadata.height / srcH);
+            if (!isUnset(jobSettings.delogoW)) jobSettings.delogoW = Math.max(1, Math.round(jobSettings.delogoW * j.metadata.width / srcW));
+            if (!isUnset(jobSettings.delogoH)) jobSettings.delogoH = Math.max(1, Math.round(jobSettings.delogoH * j.metadata.height / srcH));
+          }
+        }
+        Object.assign(j.settings, jobSettings);
         if (outputDir) {
           const outputName = path.basename(j.outputPath || makeOutputPath(j.inputPath));
           j.outputPath = path.join(outputDir, outputName);
@@ -575,6 +689,56 @@ function createServerApp(options = {}) {
     } catch (err) { res.status(400).json({ error: err.message }); }
   });
 
+  // Native OS file picker (browser mode — no Electron)
+  app.get("/api/browse-dialog", async (_req, res) => {
+    try {
+      let paths = [];
+      if (process.platform === "darwin") {
+        const script = `
+          set chosen to choose file of type {"mp4","mov","mkv","avi","webm","m4v","ts","mts"} ¬
+            with prompt "Chọn video cần xử lý:" with multiple selections allowed
+          set out to ""
+          repeat with f in chosen
+            set out to out & POSIX path of f & linefeed
+          end repeat
+          return out
+        `.trim();
+        const { stdout } = await new Promise((resolve, reject) => {
+          const ch = spawn("osascript", ["-e", script]);
+          let out = "", err = "";
+          ch.stdout.on("data", d => out += d);
+          ch.stderr.on("data", d => err += d);
+          ch.on("close", code => code === 0 ? resolve({ stdout: out }) : reject(new Error(err.trim() || "cancelled")));
+        });
+        paths = stdout.split("\n").map(p => p.trim()).filter(Boolean);
+      } else if (process.platform === "win32") {
+        // PowerShell file picker
+        const ps = `Add-Type -AssemblyName System.Windows.Forms; $d = New-Object System.Windows.Forms.OpenFileDialog; $d.Multiselect=$true; $d.Filter='Video|*.mp4;*.mov;*.mkv;*.avi;*.webm;*.m4v;*.ts'; if($d.ShowDialog() -eq 'OK'){$d.FileNames -join [char]10}`;
+        const { stdout } = await new Promise((resolve, reject) => {
+          const ch = spawn("powershell", ["-Command", ps]);
+          let out = "", err = "";
+          ch.stdout.on("data", d => out += d);
+          ch.stderr.on("data", d => err += d);
+          ch.on("close", code => code === 0 ? resolve({ stdout: out }) : reject(new Error(err.trim() || "cancelled")));
+        });
+        paths = stdout.split("\n").map(p => p.trim()).filter(Boolean);
+      } else {
+        // Linux: try zenity
+        const { stdout } = await new Promise((resolve, reject) => {
+          const ch = spawn("zenity", ["--file-selection", "--multiple", "--file-filter=Video | *.mp4 *.mov *.mkv *.avi *.webm"]);
+          let out = "";
+          ch.stdout.on("data", d => out += d);
+          ch.on("close", code => code === 0 ? resolve({ stdout: out }) : reject(new Error("cancelled")));
+        });
+        paths = stdout.split("|").map(p => p.trim()).filter(Boolean);
+      }
+      res.json({ paths });
+    } catch (err) {
+      if (err.message === "cancelled") { res.json({ paths: [] }); return; }
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.get("/api/video", async (req, res) => {
     try {
       const tp = resolveUserPath(req.query.path);
@@ -606,6 +770,24 @@ function createServerApp(options = {}) {
       if (!tp) { res.status(400).json({ error: "Thiếu đường dẫn." }); return; }
       await ensureFileExists(tp);
       res.sendFile(tp);
+    } catch (err) { res.status(400).json({ error: err.message }); }
+  });
+
+  // ── Watermark Detection ──
+
+  app.post("/api/detect-watermark", async (req, res) => {
+    try {
+      const inputPath = resolveUserPath(req.body.inputPath);
+      if (!inputPath) { res.status(400).json({ error: "Thiếu đường dẫn." }); return; }
+      await ensureFileExists(inputPath);
+      const scriptPath = path.join(baseDir, "scripts", "detect_veo.py");
+      const pythonBin  = resolvePythonBin(baseDir);
+      const ffmpegBin  = resolveExecutable("ffmpeg");
+      const ffprobeBin = resolveExecutable("ffprobe");
+      const { stdout, stderr } = await runCommand(pythonBin, [scriptPath, inputPath, ffmpegBin, ffprobeBin]);
+      const result = JSON.parse(stdout.trim());
+      if (result.error) { res.status(422).json({ error: result.error }); return; }
+      res.json(result);
     } catch (err) { res.status(400).json({ error: err.message }); }
   });
 

@@ -12,6 +12,7 @@ async function ensureServer() {
     host: "127.0.0.1",
     port: 0,
     runtimeDir: path.join(app.getPath("userData"), "runtime"),
+    baseDir: app.isPackaged ? process.resourcesPath : undefined,
   });
   return serverHandle;
 }
