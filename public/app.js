@@ -1,5 +1,5 @@
 /* ── State ──────────────────────────────────────────────── */
-const S = { jobs: [], selectedId: null, isProcessing: false, interaction: null, logoInteraction: null, doneIds: new Set() };
+const S = { jobs: [], selectedId: null, isProcessing: false, logoInteraction: null, doneIds: new Set() };
 const isElectron = !!(window.electronAPI && window.electronAPI.isElectron);
 
 /* ── DOM ───────────────────────────────────────────────── */
@@ -8,17 +8,22 @@ const el = {
   addBtn: $("addBtn"), browseBtn: $("browseBtn"), startBtn: $("startBtn"),
   stopBtn: $("stopBtn"), clearBtn: $("clearBtn"),
   dropZone: $("dropZone"), queueList: $("queueList"), queueCount: $("queueCount"),
+  queueReadyCount: $("queueReadyCount"), queueDoneCount: $("queueDoneCount"), queueIssueCount: $("queueIssueCount"),
   manualPath: $("manualPath"), addPathBtn: $("addPathBtn"),
+  emptyBrowseBtn: $("emptyBrowseBtn"),
   overallProgress: $("overallProgress"), overallFill: $("overallFill"), overallText: $("overallText"),
   emptyState: $("emptyState"), jobDetail: $("jobDetail"),
+  jobTitle: $("jobTitle"), jobSubtitle: $("jobSubtitle"),
+  heroStatus: $("heroStatus"), heroMode: $("heroMode"),
+  selectedPresetProfile: $("selectedPresetProfile"), selectedOutputName: $("selectedOutputName"),
+  stageImport: $("stageImport"), stageTune: $("stageTune"), stageExport: $("stageExport"),
   previewFrame: $("previewFrame"), previewImage: $("previewImage"),
   previewPlaceholder: $("previewPlaceholder"),
-  selectionLayer: $("selectionLayer"), selectionBox: $("selectionBox"),
   logoOverlay: $("logoOverlay"),
   metaText: $("metaText"),
-  cropSettings: $("cropSettings"), delogoSettings: $("delogoSettings"), overlaySettings: $("overlaySettings"),
+  cropSettings: $("cropSettings"), overlaySettings: $("overlaySettings"),
+  modeNote: $("modeNote"),
   cropRight: $("cropRight"), cropBottom: $("cropBottom"), scaleOutput: $("scaleOutput"), cropPresetBtn: $("cropPresetBtn"),
-  delogoX: $("delogoX"), delogoY: $("delogoY"), delogoW: $("delogoW"), delogoH: $("delogoH"), delogoPresetBtn: $("delogoPresetBtn"),
   logoPath: $("logoPath"), browseLogoBtn: $("browseLogoBtn"),
   logoX: $("logoX"), logoY: $("logoY"), logoW: $("logoW"), logoH: $("logoH"),
   logoOpacity: $("logoOpacity"), opacityVal: $("opacityVal"),
@@ -34,7 +39,107 @@ const modeTabs = document.querySelectorAll(".mode-tab");
 
 /* ── Helpers ───────────────────────────────────────────── */
 function clamp(v, min, max) { return Math.min(Math.max(v, min), max); }
+function normalizeMode(mode) { return mode === "overlay" ? "overlay" : "crop"; }
 function basename(p) { return p.split(/[\\/]/).pop(); }
+function escapeHtml(v) {
+  return String(v ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+function dirnameLike(p) {
+  const v = typeof p === "string" ? p.trim() : "";
+  const m = v.match(/^(.*)[\\/][^\\/]+$/);
+  return m ? m[1] : "";
+}
+function buildImagePreviewUrl(filePath) { return `/api/image?path=${encodeURIComponent(filePath)}`; }
+function getStatusLabel(status) {
+  return {
+    pending: "Chờ",
+    probing: "Đang đọc",
+    ready: "Sẵn sàng",
+    processing: "Đang xử lý",
+    done: "Hoàn tất",
+    error: "Lỗi",
+    cancelled: "Đã dừng",
+  }[status] || status;
+}
+function getModeLabel(mode) { return normalizeMode(mode) === "overlay" ? "Chèn logo" : "Cắt tự động"; }
+function getOrientationLabel(meta) {
+  if (!meta) return "";
+  return meta.width >= meta.height ? "Ngang" : "Dọc";
+}
+function formatFrameRate(value) {
+  if (!value) return "";
+  const parts = String(value).split("/");
+  if (parts.length === 2) {
+    const num = Number(parts[0]);
+    const den = Number(parts[1]);
+    if (num > 0 && den > 0) return (num / den).toFixed(num % den === 0 ? 0 : 2);
+  }
+  return String(value);
+}
+function formatPresetProfile(profile) {
+  if (!profile) return "";
+  const mode = profile.exact ? "khớp chính xác" : "co giãn theo tỉ lệ";
+  return `${profile.label} · preset tự động (${mode})`;
+}
+function setWorkflowState(node, state) {
+  if (!node) return;
+  node.classList.remove("is-active", "is-done", "is-error");
+  if (state) node.classList.add(`is-${state}`);
+}
+function updateWorkflow(job) {
+  setWorkflowState(el.stageImport, null);
+  setWorkflowState(el.stageTune, null);
+  setWorkflowState(el.stageExport, null);
+  if (!job) return;
+  if (job.status === "pending" || job.status === "probing") {
+    setWorkflowState(el.stageImport, "active");
+    return;
+  }
+  setWorkflowState(el.stageImport, "done");
+  if (job.status === "ready") {
+    setWorkflowState(el.stageTune, "active");
+    return;
+  }
+  setWorkflowState(el.stageTune, "done");
+  if (job.status === "processing") {
+    setWorkflowState(el.stageExport, "active");
+    return;
+  }
+  if (job.status === "done") {
+    setWorkflowState(el.stageExport, "done");
+    return;
+  }
+  if (job.status === "error" || job.status === "cancelled") {
+    setWorkflowState(el.stageExport, "error");
+  }
+}
+function updateSelectedSummary(job) {
+  if (!job) return;
+  el.jobTitle.textContent = basename(job.inputPath);
+  el.heroStatus.textContent = getStatusLabel(job.status);
+  el.heroStatus.className = `hero-pill hero-pill-status is-${job.status}`;
+  el.heroMode.textContent = getModeLabel(job.settings?.mode);
+  el.heroMode.className = "hero-pill hero-pill-muted";
+  const presetLabel = job.presetProfile ? formatPresetProfile(job.presetProfile) : "Đang chờ preset tự động";
+  el.selectedPresetProfile.textContent = presetLabel;
+  el.selectedPresetProfile.title = presetLabel;
+  const outputLabel = job.outputPath ? basename(job.outputPath) : "Tự sinh";
+  el.selectedOutputName.textContent = outputLabel;
+  el.selectedOutputName.title = job.outputPath || outputLabel;
+
+  const subtitle = [];
+  if (job.metadata) {
+    subtitle.push(`${job.metadata.width}x${job.metadata.height}`);
+    subtitle.push(`Video ${getOrientationLabel(job.metadata).toLowerCase()}`);
+    subtitle.push(`${job.metadata.duration.toFixed(1)} giây`);
+  }
+  if (job.status === "processing") subtitle.push(`Đã xuất ${job.progress}%`);
+  else if (job.status === "done") subtitle.push("Kết quả đã sẵn sàng để kiểm tra");
+  else if ((job.status === "error" || job.status === "cancelled") && job.error) subtitle.push(job.error);
+  else subtitle.push(`Chế độ ${getModeLabel(job.settings?.mode).toLowerCase()}`);
+  el.jobSubtitle.textContent = subtitle.join(" | ");
+  updateWorkflow(job);
+}
 function setStatus(msg, tone) {
   el.statusText.textContent = msg;
   el.statusIcon.className = "status-dot" + (tone === "busy" ? " busy" : tone === "err" ? " err" : "");
@@ -44,13 +149,50 @@ async function api(method, url, body) {
   if (body) opts.body = JSON.stringify(body);
   const res = await fetch(url, opts);
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error || "Request failed");
+  if (!res.ok) throw new Error(data.error || "Yêu cầu thất bại");
   return data;
 }
 function getSelectedJob() { return S.jobs.find(j => j.id === S.selectedId) || null; }
 function getCurrentMode() {
   const active = document.querySelector(".mode-tab.active");
-  return active ? active.dataset.mode : "crop";
+  return normalizeMode(active ? active.dataset.mode : "crop");
+}
+function updateModeNote(mode) {
+  const notes = {
+    crop: {
+      text: "Chất lượng tốt nhất cho watermark cố định ở góc. Cắt một phần mép nhỏ rồi phóng lại về kích thước gốc.",
+      cls: "mode-note mode-note-good",
+    },
+    overlay: {
+      text: "Dùng chế độ này khi bạn muốn đặt logo hoặc nhận diện thương hiệu mới đè lên video.",
+      cls: "mode-note",
+    },
+  };
+  const current = notes[mode] || notes.crop;
+  el.modeNote.textContent = current.text;
+  el.modeNote.className = current.cls;
+}
+function collectCurrentSettings({ includeOutputPath = false, includeOutputDir = false } = {}) {
+  const settings = {
+    mode: normalizeMode(getCurrentMode()),
+    cropRight: Number(el.cropRight.value),
+    cropBottom: Number(el.cropBottom.value),
+    scaleOutput: el.scaleOutput.checked,
+    logoPath: el.logoPath.value.trim(),
+    logoX: Number(el.logoX.value),
+    logoY: Number(el.logoY.value),
+    logoW: Number(el.logoW.value),
+    logoH: Number(el.logoH.value),
+    logoOpacity: Number(el.logoOpacity.value),
+    preset: el.preset.value,
+    crf: Number(el.crf.value),
+  };
+  if (includeOutputPath) settings.outputPath = el.outputPath.value.trim();
+  if (includeOutputDir) {
+    const outputDir = dirnameLike(el.outputPath.value);
+    if (outputDir) settings.outputDir = outputDir;
+  }
+  return settings;
 }
 
 /* ── Polling ───────────────────────────────────────────── */
@@ -66,6 +208,7 @@ async function fetchJobs() {
     const data = await api("GET", "/api/jobs");
     S.jobs = data.jobs;
     S.isProcessing = data.isProcessing;
+    if (!S.jobs.some(j => j.id === S.selectedId)) S.selectedId = S.jobs[0]?.id || null;
     // Auto-download newly completed
     if (el.autoDownload.checked) {
       for (const j of S.jobs) {
@@ -97,10 +240,13 @@ function triggerDownload(videoPath, title) {
 /* ── Add Jobs ──────────────────────────────────────────── */
 async function addPaths(paths) {
   if (!paths.length) return;
-  const mode = getCurrentMode();
   try {
-    await api("POST", "/api/jobs/add", { paths, mode, crf: Number(el.crf.value), preset: el.preset.value, scaleOutput: el.scaleOutput.checked });
-    setStatus(`Added ${paths.length} video(s)`, "ok");
+    const selectedJob = getSelectedJob();
+    const settings = selectedJob
+      ? collectCurrentSettings()
+      : { mode: getCurrentMode(), crf: Number(el.crf.value), preset: el.preset.value, scaleOutput: el.scaleOutput.checked };
+    await api("POST", "/api/jobs/add", { paths, ...settings });
+    setStatus(`Đã thêm ${paths.length} video`, "ok");
     startPolling(600);
     await fetchJobs();
   } catch (e) { setStatus(e.message, "err"); }
@@ -108,24 +254,43 @@ async function addPaths(paths) {
 
 /* ── Render Queue ──────────────────────────────────────── */
 function renderQueue() {
+  const readyCount = S.jobs.filter(j => j.status === "ready").length;
+  const doneCount = S.jobs.filter(j => j.status === "done").length;
+  const issueCount = S.jobs.filter(j => ["error", "cancelled"].includes(j.status)).length;
+  el.queueReadyCount.textContent = readyCount;
+  el.queueDoneCount.textContent = doneCount;
+  el.queueIssueCount.textContent = issueCount;
   el.queueCount.textContent = S.jobs.length;
   el.queueList.innerHTML = "";
+  if (!S.jobs.length) {
+    el.queueList.innerHTML = `
+      <div class="queue-empty">
+        <strong>Chưa có video trong hàng đợi</strong>
+        <span>Thêm video ở cột trái để bắt đầu một lượt xử lý cục bộ.</span>
+      </div>
+    `;
+  }
   for (const j of S.jobs) {
     const card = document.createElement("div");
     card.className = "job-card" + (j.id === S.selectedId ? " selected" : "");
     const badgeCls = `job-card-badge badge-${j.status}`;
-    const statusLabel = { pending: "Pending", probing: "Probing", ready: "Ready", processing: "Processing", done: "Done", error: "Error", cancelled: "Cancelled" }[j.status] || j.status;
+    const statusLabel = getStatusLabel(j.status);
     let progressHTML = "";
     if (j.status === "processing") {
       progressHTML = `<div class="job-card-progress"><div class="prog-track"><div class="prog-fill" style="width:${j.progress}%"></div></div></div>`;
     }
     const meta = j.metadata ? `${j.metadata.width}×${j.metadata.height} · ${j.metadata.duration.toFixed(1)}s` : "";
     const thumbSrc = j.previewUrl ? (j.previewUrl + "?t=" + j.id) : "";
+    const chips = [getOrientationLabel(j.metadata), getModeLabel(j.settings?.mode)]
+      .filter(Boolean)
+      .map(label => `<span class="job-meta-chip">${escapeHtml(label)}</span>`)
+      .join("");
+    const errorHTML = j.status === "error" && j.error ? `<p class="job-card-error">${escapeHtml(j.error)}</p>` : "";
     let actionsHTML = "";
     if (j.status === "done") {
       actionsHTML = `<div class="job-card-actions">
-        <button class="play-btn" data-path="${j.outputPath}" title="Play">▶ Xem</button>
-        <a class="dl-btn" href="/api/video?path=${encodeURIComponent(j.outputPath)}" download="${basename(j.outputPath)}" title="Download">⬇ Tải</a>
+        <button class="play-btn" data-path="${j.outputPath}" title="Xem video">▶ Xem</button>
+        <a class="dl-btn" href="/api/video?path=${encodeURIComponent(j.outputPath)}" download="${basename(j.outputPath)}" title="Tải về">⬇ Tải</a>
       </div>`;
     }
     card.innerHTML = `
@@ -133,11 +298,13 @@ function renderQueue() {
         ${thumbSrc ? `<img class="job-card-thumb" src="${thumbSrc}" alt="">` : `<div class="job-card-thumb-ph">🎬</div>`}
         <div class="job-card-info">
           <div class="job-card-top">
-            <span class="job-card-name" title="${j.inputPath}">${basename(j.inputPath)}</span>
-            <button class="remove-btn" data-id="${j.id}" title="Remove">✕</button>
+            <span class="job-card-name" title="${escapeHtml(j.inputPath)}">${escapeHtml(basename(j.inputPath))}</span>
+            <button class="remove-btn" data-id="${j.id}" title="Xoá">✕</button>
           </div>
           ${meta ? `<span class="job-card-meta">${meta}</span>` : ""}
+          ${chips ? `<div class="job-card-chips">${chips}</div>` : ""}
           <span class="${badgeCls}">${statusLabel}${j.status === "processing" ? ` ${j.progress}%` : ""}</span>
+          ${errorHTML}
         </div>
       </div>
       ${progressHTML}
@@ -161,12 +328,12 @@ function renderQueue() {
     const pct = ((done + (processing ? processing.progress / 100 : 0)) / total * 100).toFixed(0);
     el.overallFill.style.width = pct + "%";
     el.overallFill.className = "prog-fill" + (done === total ? " done" : "");
-    el.overallText.textContent = `${done} / ${total} completed`;
+    el.overallText.textContent = `${done} / ${total} đã hoàn tất`;
   } else if (done > 0 && done === total) {
     el.overallProgress.hidden = false;
     el.overallFill.style.width = "100%";
     el.overallFill.className = "prog-fill done";
-    el.overallText.textContent = `${done} / ${total} completed`;
+    el.overallText.textContent = `${done} / ${total} đã hoàn tất`;
   } else {
     el.overallProgress.hidden = true;
   }
@@ -183,7 +350,8 @@ function renderDetail() {
   const j = getSelectedJob();
   el.emptyState.hidden = !!j;
   el.jobDetail.hidden = !j;
-  if (!j) return;
+  if (!j) { updateWorkflow(null); return; }
+  updateSelectedSummary(j);
   // Preview
   if (j.previewUrl) {
     el.previewImage.src = j.previewUrl + "?t=" + j.id;
@@ -192,22 +360,22 @@ function renderDetail() {
   } else {
     el.previewImage.hidden = true;
     el.previewPlaceholder.hidden = false;
-    el.previewPlaceholder.textContent = j.status === "probing" ? "Loading preview…" : j.status === "error" ? j.error : "No preview";
+    el.previewPlaceholder.textContent = j.status === "probing" ? "Đang tạo ảnh xem trước…" : j.status === "error" ? j.error : "Chưa có ảnh xem trước";
   }
   // Meta
   if (j.metadata) {
-    el.metaText.textContent = `${j.metadata.width}×${j.metadata.height} | ${j.metadata.codec} | ${j.metadata.duration.toFixed(2)}s | ${j.metadata.frameRate} fps`;
+    el.metaText.textContent = `${j.metadata.width}×${j.metadata.height} | ${getOrientationLabel(j.metadata)} | ${j.metadata.codec} | ${j.metadata.duration.toFixed(2)} giây | ${formatFrameRate(j.metadata.frameRate)} fps`;
   } else { el.metaText.textContent = ""; }
   // Settings
   const s = j.settings;
   setActiveMode(s.mode);
-  el.cropRight.value = s.cropRight || 0;
-  el.cropBottom.value = s.cropBottom || 0;
+  el.cropRight.value = s.cropRight ?? j.cropPreset?.right ?? 0;
+  el.cropBottom.value = s.cropBottom ?? j.cropPreset?.bottom ?? 0;
   el.scaleOutput.checked = s.scaleOutput !== false;
-  el.delogoX.value = s.delogoX || 0;
-  el.delogoY.value = s.delogoY || 0;
-  el.delogoW.value = s.delogoW || 0;
-  el.delogoH.value = s.delogoH || 0;
+  if (el.delogoX) el.delogoX.value = s.delogoX || 0;
+  if (el.delogoY) el.delogoY.value = s.delogoY || 0;
+  if (el.delogoW) el.delogoW.value = s.delogoW || 0;
+  if (el.delogoH) el.delogoH.value = s.delogoH || 0;
   el.logoPath.value = s.logoPath || "";
   el.logoX.value = s.logoX || 0;
   el.logoY.value = s.logoY || 0;
@@ -233,12 +401,14 @@ function renderDetail() {
 
 /* ── Mode Switching ────────────────────────────────────── */
 function setActiveMode(mode) {
+  mode = normalizeMode(mode);
   modeTabs.forEach(t => t.classList.toggle("active", t.dataset.mode === mode));
   el.cropSettings.hidden = mode !== "crop";
-  el.delogoSettings.hidden = mode !== "delogo";
+  if (el.delogoSettings) el.delogoSettings.hidden = true;
   el.overlaySettings.hidden = mode !== "overlay";
-  el.selectionLayer.hidden = mode !== "delogo";
+  if (el.selectionLayer) el.selectionLayer.hidden = true;
   el.logoOverlay.hidden = mode !== "overlay";
+  updateModeNote(mode);
   renderSelectionBox();
   renderLogoOverlay();
 }
@@ -247,18 +417,8 @@ function setActiveMode(mode) {
 async function saveJobSettings() {
   const j = getSelectedJob();
   if (!j || ["processing", "done"].includes(j.status)) return;
-  const mode = getCurrentMode();
-  const settings = {
-    mode, cropRight: Number(el.cropRight.value), cropBottom: Number(el.cropBottom.value),
-    scaleOutput: el.scaleOutput.checked,
-    delogoX: Number(el.delogoX.value), delogoY: Number(el.delogoY.value),
-    delogoW: Number(el.delogoW.value), delogoH: Number(el.delogoH.value),
-    logoPath: el.logoPath.value, logoX: Number(el.logoX.value), logoY: Number(el.logoY.value),
-    logoW: Number(el.logoW.value), logoH: Number(el.logoH.value),
-    logoOpacity: Number(el.logoOpacity.value),
-    preset: el.preset.value, crf: Number(el.crf.value),
-  };
-  try { await api("POST", `/api/jobs/${j.id}/settings`, { ...settings, outputPath: el.outputPath.value }); }
+  const settings = collectCurrentSettings({ includeOutputPath: true });
+  try { await api("POST", `/api/jobs/${j.id}/settings`, settings); }
   catch { }
 }
 let saveTimeout;
@@ -282,26 +442,27 @@ function toDisplay(sel) {
   return { left: sel.x * rx, top: sel.y * ry, width: sel.w * rx, height: sel.h * ry };
 }
 function renderSelectionBox() {
-  if (getCurrentMode() !== "delogo" || !hasPreview()) { el.selectionLayer.hidden = true; el.selectionBox.hidden = true; return; }
-  el.selectionLayer.hidden = false;
-  const x = Number(el.delogoX.value), y = Number(el.delogoY.value);
-  const w = Number(el.delogoW.value), h = Number(el.delogoH.value);
-  if (w <= 0 || h <= 0) { el.selectionBox.hidden = true; return; }
-  const d = toDisplay({ x, y, w, h });
-  if (!d) { el.selectionBox.hidden = true; return; }
-  el.selectionBox.hidden = false;
-  Object.assign(el.selectionBox.style, { left: d.left + "px", top: d.top + "px", width: d.width + "px", height: d.height + "px" });
+  if (!el.selectionLayer || !el.selectionBox) return;
+  el.selectionLayer.hidden = true;
+  el.selectionBox.hidden = true;
 }
 
-// Pointer handlers for delogo
+// Pointer handlers for legacy delogo overlay (kept inert after crop-only UI)
 function insideBox(cx, cy) {
-  const d = toDisplay({ x: Number(el.delogoX.value), y: Number(el.delogoY.value), w: Number(el.delogoW.value), h: Number(el.delogoH.value) });
+  const d = toDisplay({ x: Number(el.delogoX?.value || 0), y: Number(el.delogoY?.value || 0), w: Number(el.delogoW?.value || 0), h: Number(el.delogoH?.value || 0) });
   if (!d) return false;
   const r = getPreviewRect(), lx = cx - r.left, ly = cy - r.top;
   return lx >= d.left && lx <= d.left + d.width && ly >= d.top && ly <= d.top + d.height;
 }
-el.selectionLayer.addEventListener("pointerdown", e => {
+if (el.selectionLayer && el.selectionBox) {
+  el.selectionLayer.hidden = true;
+  el.selectionBox.hidden = true;
+}
+
+// Pointer handlers for delogo
+if (el.selectionLayer) el.selectionLayer.addEventListener("pointerdown", e => {
   if (getCurrentMode() !== "delogo" || !hasPreview()) return;
+  el.selectionLayer.hidden = false;
   e.preventDefault();
   const sp = toSource(e.clientX, e.clientY);
   if (!sp) return;
@@ -315,7 +476,7 @@ el.selectionLayer.addEventListener("pointerdown", e => {
   el.selectionLayer.setPointerCapture(e.pointerId);
   renderSelectionBox();
 });
-el.selectionLayer.addEventListener("pointermove", e => {
+if (el.selectionLayer) el.selectionLayer.addEventListener("pointermove", e => {
   if (!S.interaction || S.interaction.pid !== e.pointerId) return;
   const sp = toSource(e.clientX, e.clientY);
   if (!sp) return;
@@ -334,12 +495,18 @@ el.selectionLayer.addEventListener("pointermove", e => {
   renderSelectionBox();
   debounceSave();
 });
-el.selectionLayer.addEventListener("pointerup", e => { if (S.interaction && S.interaction.pid === e.pointerId) { el.selectionLayer.releasePointerCapture(e.pointerId); S.interaction = null; debounceSave(); } });
-el.selectionLayer.addEventListener("pointercancel", e => { if (S.interaction && S.interaction.pid === e.pointerId) { S.interaction = null; } });
+if (el.selectionLayer) el.selectionLayer.addEventListener("pointerup", e => { if (S.interaction && S.interaction.pid === e.pointerId) { el.selectionLayer.releasePointerCapture(e.pointerId); S.interaction = null; debounceSave(); } });
+if (el.selectionLayer) el.selectionLayer.addEventListener("pointercancel", e => { if (S.interaction && S.interaction.pid === e.pointerId) { S.interaction = null; } });
 
 /* ── Logo Overlay (Add Logo mode) ──────────────────────── */
 function renderLogoOverlay() {
-  if (getCurrentMode() !== "overlay" || !hasPreview() || !el.logoPath.value) { el.logoOverlay.hidden = true; return; }
+  const logoPath = el.logoPath.value.trim();
+  if (getCurrentMode() !== "overlay" || !hasPreview() || !logoPath) {
+    el.logoOverlay.hidden = true;
+    el.logoOverlay.removeAttribute("src");
+    delete el.logoOverlay.dataset.sourcePath;
+    return;
+  }
   const j = getSelectedJob();
   if (!j || !j.metadata) { el.logoOverlay.hidden = true; return; }
   const r = getPreviewRect();
@@ -349,8 +516,9 @@ function renderLogoOverlay() {
   el.logoOverlay.hidden = false;
   el.logoOverlay.style.opacity = el.logoOpacity.value;
   Object.assign(el.logoOverlay.style, { left: lx + "px", top: ly + "px", width: lw + "px", height: lh + "px" });
-  if (!el.logoOverlay.src || !el.logoOverlay.src.includes(el.logoPath.value)) {
-    el.logoOverlay.src = `/previews/logo_placeholder.svg`;
+  if (el.logoOverlay.dataset.sourcePath !== logoPath) {
+    el.logoOverlay.dataset.sourcePath = logoPath;
+    el.logoOverlay.src = buildImagePreviewUrl(logoPath);
   }
 }
 
@@ -379,9 +547,9 @@ el.logoOverlay.addEventListener("pointerup", e => { if (S.logoInteraction && S.l
 function updateToolbar() {
   el.startBtn.disabled = S.isProcessing || !S.jobs.some(j => j.status === "ready");
   el.stopBtn.disabled = !S.isProcessing;
-  if (S.isProcessing) setStatus("Processing…", "busy");
-  else if (S.jobs.length && S.jobs.every(j => j.status === "done")) setStatus("All done!", "ok");
-  else setStatus("Ready", "ok");
+  if (S.isProcessing) setStatus("Đang xử lý…", "busy");
+  else if (S.jobs.length && S.jobs.every(j => j.status === "done")) setStatus("Đã hoàn tất tất cả", "ok");
+  else setStatus("Sẵn sàng", "ok");
 }
 
 /* ── Remove Job ────────────────────────────────────────── */
@@ -396,6 +564,7 @@ async function removeJob(id) {
 /* ── Event Listeners ───────────────────────────────────── */
 // Add / Browse
 el.addBtn.addEventListener("click", () => el.dropZone.click());
+el.emptyBrowseBtn.addEventListener("click", () => el.dropZone.click());
 el.browseBtn.addEventListener("click", async () => {
   if (isElectron) {
     const paths = await window.electronAPI.openFileDialog();
@@ -411,7 +580,7 @@ el.manualPath.addEventListener("keydown", e => { if (e.key === "Enter") el.addPa
 // Browse logo
 el.browseLogoBtn.addEventListener("click", async () => {
   if (isElectron) {
-    const paths = await window.electronAPI.openFileDialog();
+    const paths = await window.electronAPI.openFileDialog("image");
     if (paths && paths.length) { el.logoPath.value = paths[0]; debounceSave(); renderLogoOverlay(); }
   }
 });
@@ -427,7 +596,7 @@ el.dropZone.addEventListener("drop", async e => {
   } else {
     for (const f of e.dataTransfer.files) {
       if (f.path) paths.push(f.path);
-      else if (f.name) { setStatus("Paste full path in browser mode", "err"); return; }
+      else if (f.name) { setStatus("Trong chế độ trình duyệt, hãy dán đầy đủ đường dẫn tệp", "err"); return; }
     }
   }
   if (paths.length) await addPaths(paths);
@@ -442,18 +611,17 @@ el.dropZone.addEventListener("click", async () => {
 
 // Queue controls
 el.startBtn.addEventListener("click", async () => {
-  try { await api("POST", "/api/queue/start"); startPolling(500); setStatus("Processing…", "busy"); } catch (e) { setStatus(e.message, "err"); }
+  try { await api("POST", "/api/queue/start"); startPolling(500); setStatus("Đang xử lý…", "busy"); } catch (e) { setStatus(e.message, "err"); }
 });
 el.stopBtn.addEventListener("click", async () => {
-  try { await api("POST", "/api/queue/stop"); setStatus("Stopped", "err"); } catch (e) { setStatus(e.message, "err"); }
+  try { await api("POST", "/api/queue/stop"); setStatus("Đã dừng", "err"); } catch (e) { setStatus(e.message, "err"); }
 });
 el.clearBtn.addEventListener("click", async () => {
   try { await api("POST", "/api/jobs/clear-done"); await fetchJobs(); } catch (e) { setStatus(e.message, "err"); }
 });
 el.applyAllBtn.addEventListener("click", async () => {
-  const mode = getCurrentMode();
-  const settings = { mode, crf: Number(el.crf.value), preset: el.preset.value, scaleOutput: el.scaleOutput.checked };
-  try { const r = await api("POST", "/api/jobs/apply-settings", settings); setStatus(`Applied to ${r.count} job(s)`, "ok"); } catch (e) { setStatus(e.message, "err"); }
+  const settings = collectCurrentSettings({ includeOutputDir: true });
+  try { const r = await api("POST", "/api/jobs/apply-settings", settings); setStatus(`Đã áp dụng cho ${r.count} video`, "ok"); } catch (e) { setStatus(e.message, "err"); }
 });
 
 // Browse output folder
@@ -469,7 +637,7 @@ el.browseOutputBtn.addEventListener("click", async () => {
       }
     }
   } else {
-    const dir = prompt("Enter output folder path:", el.outputPath.value.replace(/[/\\][^/\\]+$/, ""));
+    const dir = prompt("Nhập đường dẫn thư mục xuất:", el.outputPath.value.replace(/[/\\][^/\\]+$/, ""));
     if (dir) {
       const j = getSelectedJob();
       if (j) {
@@ -508,7 +676,7 @@ modeTabs.forEach(t => t.addEventListener("click", () => {
 
 // Settings inputs
 [el.cropRight, el.cropBottom, el.scaleOutput].forEach(i => i.addEventListener("input", debounceSave));
-[el.delogoX, el.delogoY, el.delogoW, el.delogoH].forEach(i => {
+[el.delogoX, el.delogoY, el.delogoW, el.delogoH].filter(Boolean).forEach(i => {
   i.addEventListener("input", () => { renderSelectionBox(); debounceSave(); });
 });
 [el.logoPath, el.logoX, el.logoY, el.logoW, el.logoH].forEach(i => {
@@ -518,6 +686,11 @@ el.logoOpacity.addEventListener("input", () => {
   el.opacityVal.textContent = Math.round(el.logoOpacity.value * 100) + "%";
   renderLogoOverlay(); debounceSave();
 });
+el.logoOverlay.addEventListener("error", () => {
+  if (!el.logoPath.value.trim()) return;
+  el.logoOverlay.hidden = true;
+  setStatus("Không tải được ảnh xem trước của logo", "err");
+});
 [el.preset, el.crf, el.outputPath].forEach(i => i.addEventListener("input", debounceSave));
 
 // Presets
@@ -525,7 +698,7 @@ el.cropPresetBtn.addEventListener("click", () => {
   const j = getSelectedJob();
   if (j && j.cropPreset) { el.cropRight.value = j.cropPreset.right; el.cropBottom.value = j.cropPreset.bottom; el.scaleOutput.checked = true; debounceSave(); }
 });
-el.delogoPresetBtn.addEventListener("click", () => {
+if (el.delogoPresetBtn) el.delogoPresetBtn.addEventListener("click", () => {
   const j = getSelectedJob();
   if (j && j.delogoPreset) { el.delogoX.value = j.delogoPreset.x; el.delogoY.value = j.delogoPreset.y; el.delogoW.value = j.delogoPreset.w; el.delogoH.value = j.delogoPreset.h; renderSelectionBox(); debounceSave(); }
 });
@@ -534,13 +707,8 @@ el.delogoPresetBtn.addEventListener("click", () => {
 window.addEventListener("resize", () => { renderSelectionBox(); renderLogoOverlay(); });
 el.previewImage.addEventListener("load", () => { renderSelectionBox(); renderLogoOverlay(); });
 
-// Auto-select first job when queue updates
-function autoSelectFirst() {
-  if (!S.selectedId && S.jobs.length) selectJob(S.jobs[0].id);
-}
-
 // Initial fetch
-fetchJobs().then(autoSelectFirst);
+fetchJobs();
 
 // Hide browse button in web mode
 if (!isElectron) {
@@ -549,7 +717,7 @@ if (!isElectron) {
 
 /* ── Video Player ──────────────────────────────────────── */
 function openVideoPlayer(videoPath, title) {
-  el.videoTitle.textContent = title || "Video Preview";
+  el.videoTitle.textContent = title || "Xem video";
   el.videoPlayer.src = `/api/video?path=${encodeURIComponent(videoPath)}`;
   el.videoModal.hidden = false;
   el.videoPlayer.play().catch(() => { });

@@ -48,14 +48,20 @@ async function stopServer() {
 
 /* ── IPC Handlers ──────────────────────────────────────── */
 
-ipcMain.handle("dialog:openFiles", async () => {
+ipcMain.handle("dialog:openFiles", async (_event, kind = "video") => {
   if (!mainWindow) return [];
+  const isImage = kind === "image";
   const result = await dialog.showOpenDialog(mainWindow, {
-    properties: ["openFile", "multiSelections"],
-    filters: [
-      { name: "Videos", extensions: ["mp4", "mkv", "avi", "mov", "webm", "mts", "m4v", "flv"] },
-      { name: "All Files", extensions: ["*"] },
-    ],
+    properties: isImage ? ["openFile"] : ["openFile", "multiSelections"],
+    filters: isImage
+      ? [
+        { name: "Ảnh", extensions: ["png", "jpg", "jpeg", "webp", "gif", "bmp", "svg"] },
+        { name: "Tất cả tệp", extensions: ["*"] },
+      ]
+      : [
+        { name: "Video", extensions: ["mp4", "mkv", "avi", "mov", "webm", "mts", "m4v", "flv"] },
+        { name: "Tất cả tệp", extensions: ["*"] },
+      ],
   });
   return result.filePaths || [];
 });
@@ -64,7 +70,7 @@ ipcMain.handle("dialog:openFolder", async () => {
   if (!mainWindow) return null;
   const result = await dialog.showOpenDialog(mainWindow, {
     properties: ["openDirectory"],
-    title: "Choose output folder",
+    title: "Chọn thư mục đầu ra",
   });
   return result.filePaths?.[0] || null;
 });
@@ -78,7 +84,7 @@ app.on("window-all-closed", () => {
 app.on("activate", async () => {
   if (BrowserWindow.getAllWindows().length === 0) {
     try { await createMainWindow(); }
-    catch (err) { dialog.showErrorBox("Startup Error", err.message); }
+    catch (err) { dialog.showErrorBox("Lỗi khởi động", err.message); }
   }
 });
 
@@ -88,6 +94,6 @@ app.on("quit", () => { stopServer().catch(() => { }); });
 app.whenReady()
   .then(createMainWindow)
   .catch((err) => {
-    dialog.showErrorBox("Startup Error", err.message);
+    dialog.showErrorBox("Lỗi khởi động", err.message);
     if (!isQuitting) app.quit();
   });
