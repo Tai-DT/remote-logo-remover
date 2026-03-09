@@ -97,18 +97,31 @@ function renderQueue() {
       progressHTML = `<div class="job-card-progress"><div class="prog-track"><div class="prog-fill" style="width:${j.progress}%"></div></div></div>`;
     }
     const meta = j.metadata ? `${j.metadata.width}×${j.metadata.height} · ${j.metadata.duration.toFixed(1)}s` : "";
+    const thumbSrc = j.previewUrl ? (j.previewUrl + "?t=" + j.id) : "";
+    let actionsHTML = "";
+    if (j.status === "done") {
+      actionsHTML = `<div class="job-card-actions">
+        <button class="play-btn" data-path="${j.outputPath}" title="Play">▶ Xem</button>
+        <a class="dl-btn" href="/api/video?path=${encodeURIComponent(j.outputPath)}" download="${basename(j.outputPath)}" title="Download">⬇ Tải</a>
+      </div>`;
+    }
     card.innerHTML = `
-      <div class="job-card-top">
-        <span class="job-card-name" title="${j.inputPath}">${basename(j.inputPath)}</span>
-        <span class="${badgeCls}">${statusLabel}${j.status === "processing" ? ` ${j.progress}%` : ""}</span>
-        ${j.status === "done" ? `<button class="play-btn" data-path="${j.outputPath}" title="Play video">▶ Play</button>` : ""}
-        <button class="remove-btn" data-id="${j.id}" title="Remove">✕</button>
+      <div class="job-card-row">
+        ${thumbSrc ? `<img class="job-card-thumb" src="${thumbSrc}" alt="">` : `<div class="job-card-thumb-ph">🎬</div>`}
+        <div class="job-card-info">
+          <div class="job-card-top">
+            <span class="job-card-name" title="${j.inputPath}">${basename(j.inputPath)}</span>
+            <button class="remove-btn" data-id="${j.id}" title="Remove">✕</button>
+          </div>
+          ${meta ? `<span class="job-card-meta">${meta}</span>` : ""}
+          <span class="${badgeCls}">${statusLabel}${j.status === "processing" ? ` ${j.progress}%` : ""}</span>
+        </div>
       </div>
-      ${meta ? `<span class="job-card-meta">${meta}</span>` : ""}
       ${progressHTML}
+      ${actionsHTML}
     `;
     card.addEventListener("click", (e) => {
-      if (e.target.closest(".remove-btn") || e.target.closest(".play-btn")) return;
+      if (e.target.closest(".remove-btn") || e.target.closest(".play-btn") || e.target.closest(".dl-btn")) return;
       selectJob(j.id);
     });
     card.querySelector(".remove-btn").addEventListener("click", () => removeJob(j.id));
