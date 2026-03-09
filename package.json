@@ -9,8 +9,8 @@
     "start": "node server.js",
     "desktop": "node electron/launch-desktop.js",
     "dist:dir": "electron-builder --dir",
-    "dist:mac": "electron-builder --mac",
-    "dist:win": "electron-builder --win"
+    "dist:mac": "electron-builder --mac --publish never",
+    "dist:win": "electron-builder --win --publish never"
   },
   "dependencies": {
     "express": "^4.21.2",

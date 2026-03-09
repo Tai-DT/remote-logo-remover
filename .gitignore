@@ -9,3 +9,4 @@ output/
 *.png
 *.jpg
 *.jpeg
+node_modules
