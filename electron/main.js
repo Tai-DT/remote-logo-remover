@@ -8,11 +8,13 @@ let isQuitting = false;
 
 async function ensureServer() {
   if (serverHandle) return serverHandle;
+  const isPackaged = app.isPackaged;
   serverHandle = await startServer({
     host: "127.0.0.1",
     port: 0,
     runtimeDir: path.join(app.getPath("userData"), "runtime"),
-    baseDir: app.isPackaged ? process.resourcesPath : undefined,
+    appDir: isPackaged ? app.getAppPath() : undefined,
+    resourceDir: isPackaged ? process.resourcesPath : undefined,
   });
   return serverHandle;
 }
@@ -27,7 +29,7 @@ async function createMainWindow() {
     minHeight: 760,
     autoHideMenuBar: true,
     backgroundColor: "#efe3cf",
-    title: "Remote Logo Remover",
+    title: "Xóa Logo Video Cục Bộ",
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,

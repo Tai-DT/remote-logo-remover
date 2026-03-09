@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Remote Logo Remover</title>
+  <title>Xóa Logo Video Cục Bộ</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Sora:wght@500;600;700&display=swap" rel="stylesheet">
@@ -15,7 +15,7 @@
   <div class="app-window">
     <header class="toolbar">
       <div class="toolbar-brand">
-        <span class="toolbar-kicker">Desktop Video Cleanup</span>
+        <span class="toolbar-kicker">Xử lý video cục bộ</span>
         <span class="toolbar-title">
           <svg class="app-logo" width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
             <rect x="1" y="3" width="18" height="14" rx="3" stroke="currentColor" stroke-width="1.5" />
@@ -23,47 +23,47 @@
             <rect x="15" y="3" width="2" height="14" fill="currentColor" opacity="0.15" />
             <path d="M8.5 7.5L13 10L8.5 12.5V7.5Z" fill="currentColor" />
           </svg>
-          Remote Logo Remover
+          Xóa Logo Video Cục Bộ
         </span>
       </div>
 
       <div class="toolbar-left">
-        <button id="addBtn" class="tb-btn" title="Add videos">
+        <button id="addBtn" class="tb-btn" title="Thêm video">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
             <path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
           </svg>
-          <span>Add</span>
+          <span>Thêm</span>
         </button>
-        <button id="browseBtn" class="tb-btn" title="Browse files">
+        <button id="browseBtn" class="tb-btn" title="Duyệt tệp">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
             <path d="M2 4.5h4.5l1.5 1.5H14v7a1 1 0 01-1 1H3a1 1 0 01-1-1V4.5z" stroke="currentColor" stroke-width="1.4"
               stroke-linejoin="round" />
             <path d="M2 4.5V3.5a1 1 0 011-1h3.5l1.5 1.5" stroke="currentColor" stroke-width="1.4"
               stroke-linejoin="round" />
           </svg>
-          <span>Browse</span>
+          <span>Duyệt</span>
         </button>
       </div>
 
       <div class="toolbar-right">
-        <button id="startBtn" class="tb-btn accent" title="Start queue">
+        <button id="startBtn" class="tb-btn accent" title="Bắt đầu hàng đợi">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
             <path d="M4 2.5l9 5.5-9 5.5V2.5z" fill="currentColor" />
           </svg>
-          <span>Start Export</span>
+          <span>Bắt đầu xuất</span>
         </button>
-        <button id="stopBtn" class="tb-btn" title="Stop" disabled>
+        <button id="stopBtn" class="tb-btn" title="Dừng" disabled>
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
             <rect x="3" y="3" width="10" height="10" rx="1.5" fill="currentColor" />
           </svg>
-          <span>Stop</span>
+          <span>Dừng</span>
         </button>
-        <button id="clearBtn" class="tb-btn" title="Clear completed">
+        <button id="clearBtn" class="tb-btn" title="Xóa mục đã xong">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
             <path d="M5 2v1H3v1h10V3h-2V2H5zM4 5v8a1 1 0 001 1h6a1 1 0 001-1V5H4z" stroke="currentColor"
               stroke-width="1.2" fill="none" />
           </svg>
-          <span>Clear Done</span>
+          <span>Xóa mục xong</span>
         </button>
       </div>
     </header>
@@ -71,11 +71,11 @@
     <div class="app-body">
       <aside class="sidebar" id="sidebar">
         <section class="sidebar-panel import-panel">
-          <p class="panel-kicker">Step 1</p>
+          <p class="panel-kicker">Bước 1</p>
           <div class="sidebar-head">
             <div>
-              <span class="sidebar-label">Import Clips</span>
-              <p class="sidebar-copy">Drop multiple local videos or paste an absolute path.</p>
+              <span class="sidebar-label">Thêm video</span>
+              <p class="sidebar-copy">Thả nhiều video cục bộ hoặc dán trực tiếp đường dẫn tuyệt đối.</p>
             </div>
             <span id="queueCount" class="badge">0</span>
           </div>
@@ -89,13 +89,13 @@
             </svg>
             <strong>Thả video vào đây</strong>
             <span>hoặc</span>
-            <button id="dropZoneBtn" class="btn-sm" type="button">Chọn file…</button>
+            <button id="dropZoneBtn" class="btn-sm" type="button">Chọn video…</button>
             <span class="drop-hint">MP4, MOV, MKV, AVI, WEBM</span>
           </div>
 
           <div class="manual-add">
-            <input id="manualPath" type="text" placeholder="Dán đường dẫn tuyệt đối…">
-            <button id="addPathBtn" class="btn-sm" title="Add path">Add</button>
+            <input id="manualPath" type="text" placeholder="Dán đường dẫn video tuyệt đối…">
+            <button id="addPathBtn" class="btn-sm" title="Thêm đường dẫn">Thêm</button>
           </div>
         </section>
 
@@ -103,15 +103,15 @@
           <div class="queue-summary">
             <div class="mini-stat">
              <span id="queueReadyCount">0</span>
-              <label>Ready</label>
+              <label>Sẵn sàng</label>
             </div>
             <div class="mini-stat">
               <span id="queueDoneCount">0</span>
-              <label>Done</label>
+              <label>Hoàn tất</label>
             </div>
             <div class="mini-stat">
               <span id="queueIssueCount">0</span>
-              <label>Issues</label>
+              <label>Sự cố</label>
             </div>
           </div>
 
@@ -130,29 +130,29 @@
         <div id="emptyState" class="empty-state">
           <section class="empty-shell">
             <div class="empty-hero">
-              <p class="panel-kicker">Desktop-First Workflow</p>
+              <p class="panel-kicker">Quy trình trên desktop</p>
               <h1>Xóa logo cố định trực tiếp trên video mà không cắt khung hình.</h1>
-              <p>Thêm một hay nhiều video, khoanh đúng vùng watermark trên preview, rồi xuất file mới ngay trên máy mà không phải upload nguồn.</p>
+              <p>Thêm một hay nhiều video, khoanh đúng vùng watermark trên khung xem trước, rồi xuất file mới ngay trên máy mà không phải tải nguồn lên.</p>
               <div class="hero-actions">
                 <button id="emptyBrowseBtn" class="hero-btn" type="button">Chọn video…</button>
-                <span class="hero-note">Uses ffmpeg and ffprobe on your machine.</span>
+                <span class="hero-note">App dùng ffmpeg và ffprobe ngay trên máy của bạn.</span>
               </div>
             </div>
 
             <div class="empty-grid">
               <article class="empty-card">
                 <span class="empty-card-index">1</span>
-                <h2>Import</h2>
-                <p>Drag clips into the queue or browse directly from the desktop shell.</p>
+                <h2>Thêm video</h2>
+                <p>Kéo video vào hàng đợi hoặc chọn trực tiếp từ máy tính.</p>
               </article>
               <article class="empty-card">
                 <span class="empty-card-index">2</span>
-                <h2>Inspect</h2>
-                <p>Kiểm tra preview, dùng preset tự động hoặc kéo khung đúng vào vùng logo cần xoá.</p>
+                <h2>Kiểm tra</h2>
+                <p>Kiểm tra khung xem trước, dùng preset tự động hoặc kéo khung đúng vào vùng logo cần xoá.</p>
               </article>
               <article class="empty-card">
                 <span class="empty-card-index">3</span>
-                <h2>Export</h2>
+                <h2>Xuất file</h2>
                 <p>Chạy hàng đợi rồi kiểm tra kết quả ngay, khung hình vẫn giữ nguyên kích thước ban đầu.</p>
               </article>
             </div>
@@ -163,12 +163,12 @@
           <div class="detail-scroll">
             <section class="job-hero">
               <div class="job-hero-copy">
-                <p class="panel-kicker">Selected Clip</p>
+                <p class="panel-kicker">Video đang chọn</p>
                 <h1 id="jobTitle" class="job-title">Video</h1>
                 <p id="jobSubtitle" class="job-subtitle"></p>
               </div>
               <div class="job-hero-pills">
-                <span id="heroStatus" class="hero-pill hero-pill-status">Pending</span>
+                <span id="heroStatus" class="hero-pill hero-pill-status">Chờ</span>
                 <span id="heroMode" class="hero-pill hero-pill-muted">Xóa logo trực tiếp</span>
               </div>
             </section>
@@ -177,22 +177,22 @@
               <div id="stageImport" class="workflow-step">
                 <span class="workflow-index">1</span>
                 <div class="workflow-copy">
-                  <strong>Import</strong>
-                  <span>Clip added and probed</span>
+                  <strong>Thêm video</strong>
+                  <span>Đã thêm và đọc thông tin video</span>
                 </div>
               </div>
               <div id="stageTune" class="workflow-step">
                 <span class="workflow-index">2</span>
                 <div class="workflow-copy">
-                  <strong>Tune</strong>
-                  <span>Adjust method and output</span>
+                  <strong>Tinh chỉnh</strong>
+                  <span>Chọn cách xử lý và đầu ra</span>
                 </div>
               </div>
               <div id="stageExport" class="workflow-step">
                 <span class="workflow-index">3</span>
                 <div class="workflow-copy">
-                  <strong>Export</strong>
-                  <span>Process queue and review result</span>
+                  <strong>Xuất file</strong>
+                  <span>Chạy hàng đợi và kiểm tra kết quả</span>
                 </div>
               </div>
             </section>
@@ -201,22 +201,22 @@
               <section class="panel preview-panel">
                 <div class="panel-header">
                   <div>
-                    <p class="panel-kicker">Step 2</p>
-                    <h2>Preview</h2>
+                    <p class="panel-kicker">Bước 2</p>
+                    <h2>Xem trước</h2>
                   </div>
-                  <span id="selectedPresetProfile" class="soft-badge">Auto preset</span>
+                  <span id="selectedPresetProfile" class="soft-badge">Preset tự động</span>
                 </div>
 
                 <section class="preview-section">
                   <div class="preview-frame" id="previewFrame">
-                    <img id="previewImage" alt="Preview" hidden>
+                    <img id="previewImage" alt="Ảnh xem trước" hidden>
                     <div id="selectionLayer" class="selection-layer" hidden>
                       <div id="selectionBox" class="selection-box" hidden>
-                        <span class="selection-tag">Logo Area</span>
+                        <span class="selection-tag">Vùng logo</span>
                       </div>
                     </div>
                     <img id="logoOverlay" class="logo-overlay" alt="" hidden draggable="false">
-                    <p id="previewPlaceholder" class="preview-ph">Loading preview…</p>
+                    <p id="previewPlaceholder" class="preview-ph">Đang tải ảnh xem trước…</p>
                   </div>
                   <p id="metaText" class="meta-text"></p>
                 </section>
@@ -225,19 +225,19 @@
               <section class="panel controls-panel">
                 <div class="panel-header">
                   <div>
-                    <p class="panel-kicker">Step 2</p>
-                    <h2>Processing Setup</h2>
+                    <p class="panel-kicker">Bước 2</p>
+                    <h2>Thiết lập xử lý</h2>
                   </div>
                 </div>
 
                 <div class="smart-summary">
                   <div class="summary-item">
-                    <span>Export file</span>
-                    <strong id="selectedOutputName">Auto-generated</strong>
+                    <span>Tệp đầu ra</span>
+                    <strong id="selectedOutputName">Tự tạo</strong>
                   </div>
                   <div class="summary-item">
-                    <span>Scope</span>
-                    <strong>Current clip until you apply to all pending</strong>
+                    <span>Phạm vi</span>
+                    <strong>Áp dụng cho video hiện tại cho đến khi bạn áp dụng hàng loạt</strong>
                   </div>
                 </div>
 
@@ -248,15 +248,15 @@
                         <rect x="1.5" y="1.5" width="11" height="11" rx="2.5" stroke="currentColor" stroke-width="1.4" fill="none" />
                         <path d="M4.2 9.8l5.6-5.6M4.2 4.2l5.6 5.6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
                       </svg>
-                      <span>Remove Logo</span>
-                      <span class="mode-chip mode-chip-good">Recommended</span>
+                      <span>Xóa logo</span>
+                      <span class="mode-chip mode-chip-good">Khuyên dùng</span>
                     </button>
                     <button class="mode-tab" data-mode="crop">
                       <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
                         <path d="M1 4V1h3M10 1h3v3M13 10v3h-3M4 13H1v-3" stroke="currentColor" stroke-width="1.4"
                           stroke-linecap="round" stroke-linejoin="round" fill="none" />
                       </svg>
-                      <span>Crop Edge</span>
+                      <span>Cắt mép</span>
                     </button>
                     <button class="mode-tab" data-mode="overlay">
                       <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
@@ -264,11 +264,11 @@
                           fill="none" />
                         <path d="M5 7h4M7 5v4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
                       </svg>
-                      <span>Add Logo</span>
+                      <span>Chèn logo</span>
                     </button>
                   </div>
 
-                  <p id="modeNote" class="mode-note mode-note-good">Only the selected logo area is processed. The output keeps the original frame size.</p>
+                  <p id="modeNote" class="mode-note mode-note-good">Chỉ vùng logo đã chọn được xử lý. Video đầu ra giữ nguyên kích thước khung hình.</p>
 
                   <div id="delogoSettings" class="fields-group">
                     <div class="field-row">
@@ -283,19 +283,19 @@
                         <span>Phương pháp xoá</span>
                         <select id="delogoMethod">
                           <option value="reconstruct">Khôi phục nền (ShiftMap)</option>
-                          <option value="blur">Làm mờ (Gaussian Blur)</option>
+                          <option value="blur">Làm mờ (Gaussian)</option>
                         </select>
                       </label>
                     </div>
                     <div class="preset-btn-row">
-                      <button id="delogoPresetBtn" class="btn-ghost" type="button">Reset to auto preset</button>
+                      <button id="delogoPresetBtn" class="btn-ghost" type="button">Khôi phục preset tự động</button>
                       <button id="scanWatermarkBtn" class="btn-ghost btn-scan" type="button">
                         <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden="true">
                           <circle cx="6" cy="6" r="4.5" stroke="currentColor" stroke-width="1.4"/>
                           <path d="M9.5 9.5L13 13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
                           <path d="M4 6h4M6 4v4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
                         </svg>
-                        Scan Watermark
+                        Quét watermark
                       </button>
                     </div>
                     <p id="scanStatus" class="scan-status" hidden></p>
@@ -303,23 +303,23 @@
 
                   <div id="cropSettings" class="fields-group" hidden>
                     <div class="field-row">
-                      <label class="field"><span>Crop Right (px)</span><input id="cropRight" type="number" min="0" value="240"></label>
-                      <label class="field"><span>Crop Bottom (px)</span><input id="cropBottom" type="number" min="0" value="120"></label>
+                      <label class="field"><span>Cắt bên phải (px)</span><input id="cropRight" type="number" min="0" value="240"></label>
+                      <label class="field"><span>Cắt phía dưới (px)</span><input id="cropBottom" type="number" min="0" value="120"></label>
                     </div>
                     <label class="check-field">
                       <input id="scaleOutput" type="checkbox" checked>
-                      <span>Scale back to original size</span>
+                      <span>Phóng lại về kích thước gốc</span>
                     </label>
-                    <p class="hint hint-good">Cleanest option for Veo-style logos anchored to the bottom-right edge.</p>
-                    <button id="cropPresetBtn" class="btn-ghost" type="button">Reset to auto preset</button>
+                    <p class="hint hint-good">Phù hợp nhất khi watermark bám cố định ở mép phải hoặc góc dưới bên phải.</p>
+                    <button id="cropPresetBtn" class="btn-ghost" type="button">Khôi phục preset tự động</button>
                   </div>
 
                   <div id="overlaySettings" class="fields-group" hidden>
                     <div class="field-row">
-                      <label class="field full"><span>Logo image path</span>
+                      <label class="field full"><span>Đường dẫn ảnh logo</span>
                         <div class="input-with-btn">
-                          <input id="logoPath" type="text" placeholder="/path/to/logo.png">
-                          <button id="browseLogoBtn" class="btn-sm" type="button" title="Browse logo">Browse</button>
+                          <input id="logoPath" type="text" placeholder="/duong-dan/logo.png">
+                          <button id="browseLogoBtn" class="btn-sm" type="button" title="Chọn ảnh logo">Chọn ảnh</button>
                         </div>
                       </label>
                     </div>
@@ -330,22 +330,22 @@
                       <label class="field"><span>H</span><input id="logoH" type="number" min="1" value="200"></label>
                     </div>
                     <label class="field">
-                      <span>Opacity</span>
+                      <span>Độ mờ</span>
                       <input id="logoOpacity" type="range" min="0.05" max="1" step="0.05" value="1">
                       <span id="opacityVal" class="range-val">100%</span>
                     </label>
-                    <p class="hint">Drag the overlay directly on the preview to position it.</p>
+                    <p class="hint">Kéo trực tiếp logo trên ảnh xem trước để đặt vị trí.</p>
                   </div>
 
                   <div class="fields-group">
-                    <h3>Encode</h3>
+                    <h3>Mã hóa</h3>
                     <div class="field-row">
                       <label class="field">
-                        <span>Preset</span>
+                        <span>Tốc độ mã hóa</span>
                         <select id="preset">
-                          <option value="slow" selected>slow</option>
-                          <option value="medium">medium</option>
-                          <option value="fast">fast</option>
+                          <option value="slow" selected>Chậm</option>
+                          <option value="medium">Trung bình</option>
+                          <option value="fast">Nhanh</option>
                         </select>
                       </label>
                       <label class="field">
@@ -356,28 +356,28 @@
                   </div>
 
                   <div class="fields-group encode-group">
-                    <h3>Output</h3>
+                    <h3>Đầu ra</h3>
                     <label class="field full">
-                      <span>Output path</span>
+                      <span>Đường dẫn đầu ra</span>
                       <div class="input-with-btn">
-                        <input id="outputPath" type="text" placeholder="Auto-generated">
-                        <button id="browseOutputBtn" class="btn-sm" type="button" title="Choose output folder">Folder</button>
+                        <input id="outputPath" type="text" placeholder="Tự tạo">
+                        <button id="browseOutputBtn" class="btn-sm" type="button" title="Chọn thư mục đầu ra">Thư mục</button>
                       </div>
                     </label>
                     <label class="check-field">
                       <input id="autoDownload" type="checkbox">
-                      <span>Auto download when complete</span>
+                      <span>Tự tải về khi hoàn tất</span>
                     </label>
                   </div>
 
                   <div id="resultActions" class="result-actions" hidden>
-                    <h3>Result ready</h3>
+                    <h3>Kết quả đã sẵn sàng</h3>
                     <div class="result-btns">
                       <button id="playResultBtn" class="result-btn play-result" type="button">
                         <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
                           <path d="M4 2.5l9 5.5-9 5.5V2.5z" fill="currentColor" />
                         </svg>
-                        <span>Play video</span>
+                        <span>Xem video</span>
                       </button>
                       <a id="downloadResultBtn" class="result-btn download-result" download>
                         <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
@@ -385,20 +385,20 @@
                             stroke-linejoin="round" fill="none" />
                           <path d="M3 12h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
                         </svg>
-                        <span>Download</span>
+                        <span>Tải về</span>
                       </a>
                       <button id="openOutputBtn" class="result-btn open-folder" type="button">
                         <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
                           <path d="M2 4.5h4.5l1.5 1.5H14v7a1 1 0 01-1 1H3a1 1 0 01-1-1V4.5z" stroke="currentColor"
                             stroke-width="1.2" fill="none" />
                         </svg>
-                        <span>Open folder</span>
+                        <span>Mở thư mục</span>
                       </button>
                     </div>
                   </div>
 
                   <div class="detail-actions">
-                    <button id="applyAllBtn" class="btn-ghost" type="button">Apply settings to all pending</button>
+                    <button id="applyAllBtn" class="btn-ghost" type="button">Áp dụng thiết lập cho toàn bộ video chờ</button>
                   </div>
                 </section>
               </section>
@@ -410,18 +410,18 @@
 
     <footer class="statusbar">
       <span id="statusIcon" class="status-dot"></span>
-      <span id="statusText">Ready</span>
+      <span id="statusText">Sẵn sàng</span>
     </footer>
 
     <div id="videoModal" class="video-modal" hidden>
       <div class="video-modal-backdrop" id="videoBackdrop"></div>
       <div class="video-modal-content">
         <div class="video-modal-header">
-          <span id="videoTitle" class="video-modal-title">Video Preview</span>
+          <span id="videoTitle" class="video-modal-title">Xem video</span>
           <button id="videoCloseBtn" class="video-modal-close" type="button">✕</button>
         </div>
         <video id="videoPlayer" class="video-player" controls autoplay>
-          Your browser does not support video playback.
+          Trình duyệt hiện tại không hỗ trợ phát video.
         </video>
       </div>
     </div>

@@ -1,4 +1,5 @@
 const crypto = require("crypto");
+const fs = require("fs");
 const fsp = require("fs/promises");
 const path = require("path");
 const { spawn } = require("child_process");
@@ -16,6 +17,12 @@ function resolveUserPath(v) {
   return isNonEmptyString(v) ? path.resolve(v.trim()) : null;
 }
 
+function resolveCommandPath(v) {
+  if (!isNonEmptyString(v)) return null;
+  const trimmed = v.trim();
+  return /[\\/]/.test(trimmed) ? path.resolve(trimmed) : trimmed;
+}
+
 function normalizeExecutablePath(v) {
   if (!isNonEmptyString(v)) return null;
   return v.includes("app.asar") ? v.replace("app.asar", "app.asar.unpacked") : v;
@@ -31,6 +38,93 @@ function resolveExecutable(name) {
   const key = name === "ffmpeg" ? "FFMPEG_PATH" : "FFPROBE_PATH";
   const override = normalizeExecutablePath(process.env[key]);
   return override || resolveBundledBinary(name) || name;
+}
+
+function pathExists(fp) {
+  try {
+    fs.accessSync(fp);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function uniqueCommands(candidates) {
+  const seen = new Set();
+  return candidates.filter((candidate) => {
+    if (!candidate || !isNonEmptyString(candidate.cmd)) return false;
+    const key = `${candidate.cmd}\0${(candidate.args || []).join("\0")}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function buildPythonCandidates(baseDir) {
+  const override = resolveCommandPath(process.env.RLR_PYTHON_PATH || process.env.PYTHON_PATH || process.env.PYTHON);
+  const candidates = [];
+  if (override) candidates.push({ cmd: override, args: [] });
+  if (baseDir) {
+    const local = process.platform === "win32"
+      ? [
+        path.join(baseDir, ".venv", "Scripts", "python.exe"),
+        path.join(baseDir, "venv", "Scripts", "python.exe"),
+      ]
+      : [
+        path.join(baseDir, ".venv", "bin", "python"),
+        path.join(baseDir, ".venv", "bin", "python3"),
+        path.join(baseDir, "venv", "bin", "python"),
+        path.join(baseDir, "venv", "bin", "python3"),
+      ];
+    for (const candidate of local) {
+      if (pathExists(candidate)) candidates.push({ cmd: candidate, args: [] });
+    }
+  }
+  if (process.platform === "win32") {
+    candidates.push(
+      { cmd: "py", args: ["-3"] },
+      { cmd: "python", args: [] },
+      { cmd: "python3", args: [] },
+    );
+  } else {
+    candidates.push(
+      { cmd: "python3", args: [] },
+      { cmd: "python", args: [] },
+    );
+  }
+  return uniqueCommands(candidates);
+}
+
+const pythonCommandCache = new Map();
+
+async function resolvePythonCommand(baseDir, options = {}) {
+  const requiredModules = Array.isArray(options.requiredModules)
+    ? options.requiredModules.filter(isNonEmptyString)
+    : [];
+  for (const candidate of buildPythonCandidates(baseDir)) {
+    const cacheKey = `${candidate.cmd}\0${candidate.args.join("\0")}\0${requiredModules.join(",")}`;
+    if (pythonCommandCache.has(cacheKey)) {
+      const cached = pythonCommandCache.get(cacheKey);
+      if (cached) return cached;
+      continue;
+    }
+    try {
+      const imports = requiredModules.length ? `import ${requiredModules.join(",")}; ` : "";
+      await runCommand(candidate.cmd, [...candidate.args, "-c", `${imports}print("ok")`]);
+      pythonCommandCache.set(cacheKey, candidate);
+      return candidate;
+    } catch {
+      pythonCommandCache.set(cacheKey, null);
+    }
+  }
+  return null;
+}
+
+function resolveScriptPath(scriptDir, appDir, scriptName) {
+  const candidates = [];
+  if (isNonEmptyString(scriptDir)) candidates.push(path.join(scriptDir, scriptName));
+  if (isNonEmptyString(appDir)) candidates.push(path.join(appDir, "scripts", scriptName));
+  return candidates.find(pathExists) || null;
 }
 
 function scaleFromBase(v, src, base) { return Math.max(1, Math.round((v * src) / base)); }
@@ -155,9 +249,9 @@ function buildPresetBundle(w, h) {
   };
 }
 
-function runCommand(cmd, args) {
+function runCommand(cmd, args, options = {}) {
   return new Promise((resolve, reject) => {
-    const child = spawn(cmd, args, { stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(cmd, args, { stdio: ["ignore", "pipe", "pipe"], ...options });
     let stdout = "", stderr = "";
     child.stdout.on("data", c => { stdout += c.toString(); });
     child.stderr.on("data", c => { stderr += c.toString(); });
@@ -313,7 +407,9 @@ const jobOrder = [];
 let queueRunning = false;
 let currentChild = null;
 let _previewDir = null;
-let _baseDir = null;
+let _appDir = null;
+let _scriptDir = null;
+let _pythonBaseDir = null;
 
 function sanitizeJob(j) {
   if (!j) return null;
@@ -425,10 +521,9 @@ async function processJob(job) {
     if (job.settings.mode === "overlay") {
       args = buildOverlayArgs(job.inputPath, job.outputPath, job.settings);
     } else if (job.settings.mode === "delogo") {
-      // Use OpenCV Telea inpainting (reconstructs background, not just blurs)
-      const pythonBin  = _baseDir ? resolvePythonBin(_baseDir) : null;
-      const scriptPath = _baseDir ? path.join(_baseDir, "scripts", "inpaint_video.py") : null;
-      if (pythonBin && scriptPath) {
+      const pythonCmd = await resolvePythonCommand(_pythonBaseDir, { requiredModules: ["cv2", "numpy"] });
+      const scriptPath = resolveScriptPath(_scriptDir, _appDir, "inpaint_video.py");
+      if (pythonCmd && scriptPath) {
         const scriptArg = JSON.stringify({
           input:       job.inputPath,
           output:      job.outputPath,
@@ -444,8 +539,8 @@ async function processJob(job) {
           crf:         clampInt(job.settings.crf, 16),
           method:      job.settings.delogoMethod === "blur" ? "blur" : "reconstruct",
         });
-        cmd  = pythonBin;
-        args = [scriptPath, scriptArg];
+        cmd  = pythonCmd.cmd;
+        args = [...pythonCmd.args, scriptPath, scriptArg];
       } else {
         // Fallback: ffmpeg delogo
         const filter = buildVideoFilter("delogo", job.settings, job.metadata);
@@ -489,13 +584,25 @@ async function processQueue() {
   try {
     while (queueRunning) {
       let next = null;
+      let hasInFlightProbe = false;
       for (const id of jobOrder) {
         const j = jobs.get(id);
         if (!j) continue;
-        if (j.status === "pending") await probeJob(j);
+        if (j.status === "pending") {
+          hasInFlightProbe = true;
+          await probeJob(j);
+        } else if (j.status === "probing") {
+          hasInFlightProbe = true;
+        }
         if (j.status === "ready") { next = j; break; }
       }
-      if (!next) break;
+      if (!next) {
+        if (hasInFlightProbe) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+          continue;
+        }
+        break;
+      }
       await processJob(next);
     }
   } finally { queueRunning = false; }
@@ -509,30 +616,21 @@ function stopQueue() {
   }
 }
 
-/* ── Python venv resolver ──────────────────────────────── */
-
-function resolvePythonBin(baseDir) {
-  const candidates = [
-    path.join(baseDir, ".venv", "bin", "python"),
-    path.join(baseDir, ".venv", "bin", "python3"),
-  ];
-  const { execSync } = require("child_process");
-  for (const p of candidates) {
-    try { const fs = require("fs"); fs.accessSync(p, require("fs").constants.X_OK); return p; } catch { }
-  }
-  return "python3";
-}
-
 /* ── Express App ───────────────────────────────────────── */
 
 function createServerApp(options = {}) {
   const app = express();
-  const baseDir = options.baseDir || __dirname;
-  const runtimeDir = options.runtimeDir || path.join(baseDir, "runtime");
+  const appDir = options.appDir || options.baseDir || __dirname;
+  const resourceDir = options.resourceDir || appDir;
+  const scriptDir = options.scriptDir || path.join(resourceDir, "scripts");
+  const pythonBaseDir = options.pythonBaseDir || appDir;
+  const runtimeDir = options.runtimeDir || path.join(appDir, "runtime");
   const previewDir = path.join(runtimeDir, "previews");
-  const publicDir = options.publicDir || path.join(baseDir, "public");
+  const publicDir = options.publicDir || path.join(appDir, "public");
   _previewDir = previewDir;
-  _baseDir = baseDir;
+  _appDir = appDir;
+  _scriptDir = scriptDir;
+  _pythonBaseDir = pythonBaseDir;
 
   app.use(express.json({ limit: "1mb" }));
   app.use("/previews", express.static(previewDir));
@@ -780,11 +878,19 @@ function createServerApp(options = {}) {
       const inputPath = resolveUserPath(req.body.inputPath);
       if (!inputPath) { res.status(400).json({ error: "Thiếu đường dẫn." }); return; }
       await ensureFileExists(inputPath);
-      const scriptPath = path.join(baseDir, "scripts", "detect_veo.py");
-      const pythonBin  = resolvePythonBin(baseDir);
+      const scriptPath = resolveScriptPath(scriptDir, appDir, "detect_veo.py");
+      if (!scriptPath) {
+        res.status(500).json({ error: "Không tìm thấy script quét watermark." });
+        return;
+      }
+      const pythonCmd = await resolvePythonCommand(pythonBaseDir);
+      if (!pythonCmd) {
+        res.status(503).json({ error: "Tính năng Scan Watermark cần Python cài trên máy để chạy." });
+        return;
+      }
       const ffmpegBin  = resolveExecutable("ffmpeg");
       const ffprobeBin = resolveExecutable("ffprobe");
-      const { stdout, stderr } = await runCommand(pythonBin, [scriptPath, inputPath, ffmpegBin, ffprobeBin]);
+      const { stdout } = await runCommand(pythonCmd.cmd, [...pythonCmd.args, scriptPath, inputPath, ffmpegBin, ffprobeBin]);
       const result = JSON.parse(stdout.trim());
       if (result.error) { res.status(422).json({ error: result.error }); return; }
       res.json(result);

@@ -40,11 +40,15 @@ const el = {
   statusText: $("statusText"), statusIcon: $("statusIcon"),
 };
 const modeTabs = document.querySelectorAll(".mode-tab");
+const SCAN_BUTTON_ICON = `<svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden="true"><circle cx="6" cy="6" r="4.5" stroke="currentColor" stroke-width="1.4"/><path d="M9.5 9.5L13 13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M4 6h4M6 4v4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>`;
 
 /* ── Helpers ───────────────────────────────────────────── */
 function clamp(v, min, max) { return Math.min(Math.max(v, min), max); }
 function normalizeMode(mode) { return ["delogo", "crop", "overlay"].includes(mode) ? mode : "delogo"; }
 function basename(p) { return p.split(/[\\/]/).pop(); }
+function formatDuration(seconds, digits = 1) {
+  return `${Number(seconds || 0).toFixed(digits)} giây`;
+}
 function escapeHtml(v) {
   return String(v ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
@@ -53,7 +57,22 @@ function dirnameLike(p) {
   const m = v.match(/^(.*)[\\/][^\\/]+$/);
   return m ? m[1] : "";
 }
+function joinLikePath(dir, file) {
+  const base = typeof dir === "string" ? dir.trim().replace(/[\\/]+$/, "") : "";
+  if (!base) return file;
+  const separator = /\\/.test(base) ? "\\" : "/";
+  return `${base}${separator}${file}`;
+}
+function getDownloadFilename(videoPath, fallbackTitle = "") {
+  if (videoPath) return basename(videoPath);
+  const base = fallbackTitle ? fallbackTitle.replace(/\.[^.]+$/, "") : "output";
+  return `${base}_no_logo.mp4`;
+}
 function buildImagePreviewUrl(filePath) { return `/api/image?path=${encodeURIComponent(filePath)}`; }
+function resetScanButton() {
+  if (!el.scanWatermarkBtn) return;
+  el.scanWatermarkBtn.innerHTML = `${SCAN_BUTTON_ICON} Quét watermark`;
+}
 function getStatusLabel(status) {
   return {
     pending: "Chờ",
@@ -133,7 +152,7 @@ function updateSelectedSummary(job) {
   const presetLabel = job.presetProfile ? formatPresetProfile(job.presetProfile) : "Đang chờ preset tự động";
   el.selectedPresetProfile.textContent = presetLabel;
   el.selectedPresetProfile.title = presetLabel;
-  const outputLabel = job.outputPath ? basename(job.outputPath) : "Tự sinh";
+  const outputLabel = job.outputPath ? basename(job.outputPath) : "Tự tạo";
   el.selectedOutputName.textContent = outputLabel;
   el.selectedOutputName.title = job.outputPath || outputLabel;
 
@@ -141,7 +160,7 @@ function updateSelectedSummary(job) {
   if (job.metadata) {
     subtitle.push(`${job.metadata.width}x${job.metadata.height}`);
     subtitle.push(`Video ${getOrientationLabel(job.metadata).toLowerCase()}`);
-    subtitle.push(`${job.metadata.duration.toFixed(1)} giây`);
+    subtitle.push(formatDuration(job.metadata.duration));
   }
   if (job.status === "processing") subtitle.push(`Đã xuất ${job.progress}%`);
   else if (job.status === "done") subtitle.push("Kết quả đã sẵn sàng để kiểm tra");
@@ -194,7 +213,6 @@ function collectCurrentSettings({ includeOutputPath = false, includeOutputDir = 
     delogoW: Number(el.delogoW.value),
     delogoH: Number(el.delogoH.value),
     delogoMethod: el.delogoMethod ? el.delogoMethod.value : "reconstruct",
-    delogoMethod: el.delogoMethod ? el.delogoMethod.value : 'reconstruct',
     cropRight: Number(el.cropRight.value),
     cropBottom: Number(el.cropBottom.value),
     scaleOutput: el.scaleOutput.checked,
@@ -251,7 +269,7 @@ async function fetchJobs() {
 function triggerDownload(videoPath, title) {
   const a = document.createElement("a");
   a.href = `/api/video?path=${encodeURIComponent(videoPath)}`;
-  a.download = title.replace(/\.[^.]+$/, "") + "_no_logo.mp4";
+  a.download = getDownloadFilename(videoPath, title);
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -299,7 +317,7 @@ function renderQueue() {
     if (j.status === "processing") {
       progressHTML = `<div class="job-card-progress"><div class="prog-track"><div class="prog-fill" style="width:${j.progress}%"></div></div></div>`;
     }
-    const meta = j.metadata ? `${j.metadata.width}×${j.metadata.height} · ${j.metadata.duration.toFixed(1)}s` : "";
+    const meta = j.metadata ? `${j.metadata.width}×${j.metadata.height} · ${formatDuration(j.metadata.duration)}` : "";
     const thumbSrc = j.previewUrl ? (j.previewUrl + "?t=" + j.id) : "";
     const chips = [getOrientationLabel(j.metadata), getModeLabel(j.settings?.mode)]
       .filter(Boolean)
@@ -397,7 +415,6 @@ function renderDetail() {
   if (el.delogoW) el.delogoW.value = s.delogoW ?? j.delogoPreset?.w ?? 1;
   if (el.delogoH) el.delogoH.value = s.delogoH ?? j.delogoPreset?.h ?? 1;
   if (el.delogoMethod) el.delogoMethod.value = s.delogoMethod || "reconstruct";
-  if (el.delogoMethod) el.delogoMethod.value = s.delogoMethod || 'reconstruct';
   el.logoPath.value = s.logoPath || "";
   el.logoX.value = s.logoX || 0;
   el.logoY.value = s.logoY || 0;
@@ -595,10 +612,16 @@ el.logoOverlay.addEventListener("pointerup", e => { if (S.logoInteraction && S.l
 
 /* ── Toolbar State ─────────────────────────────────────── */
 function updateToolbar() {
-  el.startBtn.disabled = S.isProcessing || !S.jobs.some(j => j.status === "ready");
+  const hasRunnable = S.jobs.some(j => ["pending", "probing", "ready"].includes(j.status));
+  const hasPreparing = S.jobs.some(j => ["pending", "probing"].includes(j.status));
+  const hasIssues = S.jobs.some(j => ["error", "cancelled"].includes(j.status));
+  el.startBtn.disabled = S.isProcessing || !hasRunnable;
   el.stopBtn.disabled = !S.isProcessing;
   if (S.isProcessing) setStatus("Đang xử lý…", "busy");
+  else if (hasPreparing) setStatus("Đang chuẩn bị video…", "busy");
   else if (S.jobs.length && S.jobs.every(j => j.status === "done")) setStatus("Đã hoàn tất tất cả", "ok");
+  else if (hasIssues && !hasRunnable) setStatus("Có video cần kiểm tra lại", "err");
+  else if (hasRunnable) setStatus("Sẵn sàng xuất", "ok");
   else setStatus("Sẵn sàng", "ok");
 }
 
@@ -643,6 +666,14 @@ el.browseLogoBtn.addEventListener("click", async () => {
   if (isElectron) {
     const paths = await window.electronAPI.openFileDialog("image");
     if (paths && paths.length) { el.logoPath.value = paths[0]; debounceSave(); renderLogoOverlay(); }
+    return;
+  }
+  const currentPath = el.logoPath.value.trim();
+  const logoPath = prompt("Nhập đường dẫn tuyệt đối tới ảnh logo:", currentPath);
+  if (logoPath) {
+    el.logoPath.value = logoPath.trim();
+    debounceSave();
+    renderLogoOverlay();
   }
 });
 
@@ -698,7 +729,7 @@ el.browseOutputBtn.addEventListener("click", async () => {
       const j = getSelectedJob();
       if (j) {
         const fname = basename(el.outputPath.value || j.outputPath || "output.mp4");
-        el.outputPath.value = dir + "/" + fname;
+        el.outputPath.value = joinLikePath(dir, fname);
         debounceSave();
       }
     }
@@ -708,7 +739,7 @@ el.browseOutputBtn.addEventListener("click", async () => {
       const j = getSelectedJob();
       if (j) {
         const fname = basename(el.outputPath.value || j.outputPath || "output.mp4");
-        el.outputPath.value = dir + "/" + fname;
+        el.outputPath.value = joinLikePath(dir, fname);
         debounceSave();
       }
     }
@@ -724,8 +755,12 @@ el.playResultBtn.addEventListener("click", () => {
 // Open output folder
 el.openOutputBtn.addEventListener("click", async () => {
   const j = getSelectedJob();
-  if (!j) return;
-  try { await fetch(`/api/open-output?path=${encodeURIComponent(j.outputPath)}`); } catch { }
+  if (!j || !j.outputPath) return;
+  try {
+    await api("GET", `/api/open-output?path=${encodeURIComponent(j.outputPath)}`);
+  } catch (e) {
+    setStatus(e.message, "err");
+  }
 });
 
 // Auto-download persistence
@@ -793,7 +828,7 @@ if (el.scanWatermarkBtn) el.scanWatermarkBtn.addEventListener("click", async () 
     renderSelectionBox();
     debounceSave();
     el.scanStatus.className = "scan-status";
-    el.scanStatus.textContent = `Đã tìm thấy watermark: x=${result.x} y=${result.y} w=${result.w} h=${result.h} (phân tích ${result.framesAnalyzed} frame)`;
+    el.scanStatus.textContent = `Đã tìm thấy watermark: x=${result.x} y=${result.y} w=${result.w} h=${result.h} (phân tích ${result.framesAnalyzed} khung hình)`;
     el.scanStatus.hidden = false;
   } catch (e) {
     el.scanStatus.className = "scan-status err";
@@ -801,7 +836,7 @@ if (el.scanWatermarkBtn) el.scanWatermarkBtn.addEventListener("click", async () 
     el.scanStatus.hidden = false;
   } finally {
     el.scanWatermarkBtn.classList.remove("scanning");
-    el.scanWatermarkBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden="true"><circle cx="6" cy="6" r="4.5" stroke="currentColor" stroke-width="1.4"/><path d="M9.5 9.5L13 13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M4 6h4M6 4v4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg> Scan Watermark`;
+    resetScanButton();
   }
 });
 
@@ -812,10 +847,7 @@ el.previewImage.addEventListener("load", () => { renderSelectionBox(); renderLog
 // Initial fetch
 fetchJobs();
 
-// Hide browse button in web mode
-if (!isElectron) {
-  el.browseLogoBtn.style.display = "none";
-}
+resetScanButton();
 
 /* ── Video Player ──────────────────────────────────────── */
 function openVideoPlayer(videoPath, title) {

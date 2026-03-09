@@ -2,7 +2,7 @@
   "name": "remote-logo-remover",
   "version": "0.1.0",
   "private": true,
-  "description": "Local tool for removing fixed corner logos from videos with ffmpeg",
+  "description": "Công cụ cục bộ để xoá logo cố định trên video bằng ffmpeg",
   "author": "Tai <tai@remotelogo.app>",
   "main": "electron/main.js",
   "scripts": {
@@ -24,7 +24,7 @@
   },
   "build": {
     "appId": "com.tai.remotelogoremover",
-    "productName": "Remote Logo Remover",
+    "productName": "Xoa Logo Video Cuc Bo",
     "directories": {
       "output": "dist"
     },
