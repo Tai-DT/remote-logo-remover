@@ -777,6 +777,79 @@ body {
   padding-top: 16px;
 }
 
+/* ── Result Actions ───────────────────────────────────── */
+.result-actions {
+  padding: 16px 0 8px;
+  border-top: 1px solid var(--sep);
+  margin-top: 8px;
+}
+
+.result-actions[hidden] {
+  display: none !important;
+}
+
+.result-actions h3 {
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0 0 10px;
+  color: var(--green);
+}
+
+.result-btns {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.result-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: background 0.15s, transform 0.1s;
+  text-decoration: none;
+}
+
+.result-btn:hover {
+  transform: scale(1.03);
+}
+
+.result-btn:active {
+  transform: scale(0.97);
+}
+
+.play-result {
+  background: var(--accent);
+  color: #fff;
+}
+
+.play-result:hover {
+  background: #0062cc;
+}
+
+.download-result {
+  background: var(--green);
+  color: #fff;
+}
+
+.download-result:hover {
+  background: #28a745;
+}
+
+.open-folder {
+  background: var(--pill-bg);
+  color: var(--text1);
+}
+
+.open-folder:hover {
+  background: var(--card-hover);
+}
+
 .encode-group {
   border-bottom: none;
 }

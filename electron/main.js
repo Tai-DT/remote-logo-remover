@@ -60,6 +60,15 @@ ipcMain.handle("dialog:openFiles", async () => {
   return result.filePaths || [];
 });
 
+ipcMain.handle("dialog:openFolder", async () => {
+  if (!mainWindow) return null;
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ["openDirectory"],
+    title: "Choose output folder",
+  });
+  return result.filePaths?.[0] || null;
+});
+
 /* ── App lifecycle ─────────────────────────────────────── */
 
 app.on("window-all-closed", () => {

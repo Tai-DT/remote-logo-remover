@@ -1,5 +1,5 @@
 /* ── State ──────────────────────────────────────────────── */
-const S = { jobs: [], selectedId: null, isProcessing: false, interaction: null, logoInteraction: null };
+const S = { jobs: [], selectedId: null, isProcessing: false, interaction: null, logoInteraction: null, doneIds: new Set() };
 const isElectron = !!(window.electronAPI && window.electronAPI.isElectron);
 
 /* ── DOM ───────────────────────────────────────────────── */
@@ -23,6 +23,8 @@ const el = {
   logoX: $("logoX"), logoY: $("logoY"), logoW: $("logoW"), logoH: $("logoH"),
   logoOpacity: $("logoOpacity"), opacityVal: $("opacityVal"),
   preset: $("preset"), crf: $("crf"), outputPath: $("outputPath"),
+  browseOutputBtn: $("browseOutputBtn"), autoDownload: $("autoDownload"),
+  resultActions: $("resultActions"), playResultBtn: $("playResultBtn"), downloadResultBtn: $("downloadResultBtn"),
   videoModal: $("videoModal"), videoBackdrop: $("videoBackdrop"), videoPlayer: $("videoPlayer"),
   videoTitle: $("videoTitle"), videoCloseBtn: $("videoCloseBtn"),
   applyAllBtn: $("applyAllBtn"), openOutputBtn: $("openOutputBtn"),
@@ -64,11 +66,32 @@ async function fetchJobs() {
     const data = await api("GET", "/api/jobs");
     S.jobs = data.jobs;
     S.isProcessing = data.isProcessing;
+    // Auto-download newly completed
+    if (el.autoDownload.checked) {
+      for (const j of S.jobs) {
+        if (j.status === "done" && j.outputPath && !S.doneIds.has(j.id)) {
+          triggerDownload(j.outputPath, basename(j.inputPath));
+        }
+      }
+    }
+    // Track done IDs
+    for (const j of S.jobs) {
+      if (j.status === "done") S.doneIds.add(j.id);
+    }
     renderQueue();
     renderDetail();
     updateToolbar();
     if (!S.isProcessing && !S.jobs.some(j => ["pending", "probing"].includes(j.status))) stopPolling();
   } catch { }
+}
+
+function triggerDownload(videoPath, title) {
+  const a = document.createElement("a");
+  a.href = `/api/video?path=${encodeURIComponent(videoPath)}`;
+  a.download = title.replace(/\.[^.]+$/, "") + "_no_logo.mp4";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
 }
 
 /* ── Add Jobs ──────────────────────────────────────────── */
@@ -195,7 +218,14 @@ function renderDetail() {
   el.preset.value = s.preset || "slow";
   el.crf.value = s.crf ?? 16;
   el.outputPath.value = j.outputPath || "";
-  el.openOutputBtn.disabled = j.status !== "done";
+  // Result actions
+  if (j.status === "done" && j.outputPath) {
+    el.resultActions.hidden = false;
+    el.downloadResultBtn.href = `/api/video?path=${encodeURIComponent(j.outputPath)}`;
+    el.downloadResultBtn.download = basename(j.outputPath);
+  } else {
+    el.resultActions.hidden = true;
+  }
   // Selection box
   renderSelectionBox();
   renderLogoOverlay();
@@ -425,10 +455,49 @@ el.applyAllBtn.addEventListener("click", async () => {
   const settings = { mode, crf: Number(el.crf.value), preset: el.preset.value, scaleOutput: el.scaleOutput.checked };
   try { const r = await api("POST", "/api/jobs/apply-settings", settings); setStatus(`Applied to ${r.count} job(s)`, "ok"); } catch (e) { setStatus(e.message, "err"); }
 });
+
+// Browse output folder
+el.browseOutputBtn.addEventListener("click", async () => {
+  if (isElectron && window.electronAPI.openFolderDialog) {
+    const dir = await window.electronAPI.openFolderDialog();
+    if (dir) {
+      const j = getSelectedJob();
+      if (j) {
+        const fname = basename(el.outputPath.value || j.outputPath || "output.mp4");
+        el.outputPath.value = dir + "/" + fname;
+        debounceSave();
+      }
+    }
+  } else {
+    const dir = prompt("Enter output folder path:", el.outputPath.value.replace(/[/\\][^/\\]+$/, ""));
+    if (dir) {
+      const j = getSelectedJob();
+      if (j) {
+        const fname = basename(el.outputPath.value || j.outputPath || "output.mp4");
+        el.outputPath.value = dir + "/" + fname;
+        debounceSave();
+      }
+    }
+  }
+});
+
+// Play result video
+el.playResultBtn.addEventListener("click", () => {
+  const j = getSelectedJob();
+  if (j && j.outputPath) openVideoPlayer(j.outputPath, basename(j.inputPath));
+});
+
+// Open output folder
 el.openOutputBtn.addEventListener("click", async () => {
   const j = getSelectedJob();
   if (!j) return;
   try { await fetch(`/api/open-output?path=${encodeURIComponent(j.outputPath)}`); } catch { }
+});
+
+// Auto-download persistence
+el.autoDownload.checked = localStorage.getItem("autoDownload") === "true";
+el.autoDownload.addEventListener("change", () => {
+  localStorage.setItem("autoDownload", el.autoDownload.checked);
 });
 
 // Mode tabs
