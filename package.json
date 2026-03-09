@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Local tool for removing fixed corner logos from videos with ffmpeg",
-  "author": "Tai",
+  "author": "Tai <tai@remotelogo.app>",
   "main": "electron/main.js",
   "scripts": {
     "start": "node server.js",
