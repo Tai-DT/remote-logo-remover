@@ -1,0 +1,59 @@
+{
+  "name": "remote-logo-remover",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local tool for removing fixed corner logos from videos with ffmpeg",
+  "author": "Tai",
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "node server.js",
+    "desktop": "node electron/launch-desktop.js",
+    "dist:dir": "electron-builder --dir",
+    "dist:mac": "electron-builder --mac",
+    "dist:win": "electron-builder --win"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "ffmpeg-static": "^5.3.0",
+    "ffprobe-static": "^3.1.0"
+  },
+  "devDependencies": {
+    "electron": "^35.7.5",
+    "electron-builder": "^26.8.1"
+  },
+  "build": {
+    "appId": "com.tai.remotelogoremover",
+    "productName": "Remote Logo Remover",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "electron/**/*",
+      "public/**/*",
+      "server.js",
+      "package.json"
+    ],
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/ffmpeg-static/**/*",
+      "node_modules/ffprobe-static/**/*"
+    ],
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.video"
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "zip"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  }
+}
