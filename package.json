@@ -10,7 +10,8 @@
     "desktop": "node electron/launch-desktop.js",
     "dist:dir": "electron-builder --dir",
     "dist:mac": "electron-builder --mac --publish never",
-    "dist:win": "electron-builder --win --publish never"
+    "dist:win": "electron-builder --win --publish never",
+    "dist:linux": "electron-builder --linux --publish never"
   },
   "dependencies": {
     "express": "^4.21.2",
@@ -50,6 +51,14 @@
         "nsis",
         "zip"
       ]
+    },
+    "linux": {
+      "target": [
+        "deb",
+        "AppImage",
+        "zip"
+      ],
+      "category": "Video"
     },
     "nsis": {
       "oneClick": false,
