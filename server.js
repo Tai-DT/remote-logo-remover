@@ -386,6 +386,31 @@ function createServerApp(options = {}) {
     } catch (err) { res.status(400).json({ error: err.message }); }
   });
 
+  app.get("/api/video", async (req, res) => {
+    try {
+      const tp = resolveUserPath(req.query.path);
+      if (!tp) { res.status(400).json({ error: "Missing path." }); return; }
+      const stats = await fsp.stat(tp);
+      if (!stats.isFile()) { res.status(400).json({ error: "Not a file." }); return; }
+      const ext = path.extname(tp).toLowerCase();
+      const mimeMap = { ".mp4": "video/mp4", ".webm": "video/webm", ".mkv": "video/x-matroska", ".mov": "video/quicktime", ".avi": "video/x-msvideo" };
+      const mime = mimeMap[ext] || "video/mp4";
+      const range = req.headers.range;
+      if (range) {
+        const parts = range.replace(/bytes=/, "").split("-");
+        const start = parseInt(parts[0], 10);
+        const end = parts[1] ? parseInt(parts[1], 10) : stats.size - 1;
+        res.writeHead(206, { "Content-Range": `bytes ${start}-${end}/${stats.size}`, "Accept-Ranges": "bytes", "Content-Length": end - start + 1, "Content-Type": mime });
+        const { createReadStream } = require("fs");
+        createReadStream(tp, { start, end }).pipe(res);
+      } else {
+        res.writeHead(200, { "Content-Length": stats.size, "Content-Type": mime, "Accept-Ranges": "bytes" });
+        const { createReadStream } = require("fs");
+        createReadStream(tp).pipe(res);
+      }
+    } catch (err) { res.status(400).json({ error: err.message }); }
+  });
+
   app.get("*", (_req, res) => { res.sendFile(path.join(publicDir, "index.html")); });
 
   return { app, runtimeDir, previewDir, publicDir };

@@ -1,5 +1,6 @@
 <!doctype html>
 <html lang="vi">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -8,17 +9,25 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/styles.css">
 </head>
+
 <body>
   <div class="app-window">
     <!-- Toolbar -->
     <header class="toolbar">
       <div class="toolbar-left">
         <button id="addBtn" class="tb-btn" title="Add videos">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+          </svg>
           <span>Add</span>
         </button>
         <button id="browseBtn" class="tb-btn" title="Browse files">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 4.5h4.5l1.5 1.5H14v7a1 1 0 01-1 1H3a1 1 0 01-1-1V4.5z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M2 4.5V3.5a1 1 0 011-1h3.5l1.5 1.5" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M2 4.5h4.5l1.5 1.5H14v7a1 1 0 01-1 1H3a1 1 0 01-1-1V4.5z" stroke="currentColor" stroke-width="1.4"
+              stroke-linejoin="round" />
+            <path d="M2 4.5V3.5a1 1 0 011-1h3.5l1.5 1.5" stroke="currentColor" stroke-width="1.4"
+              stroke-linejoin="round" />
+          </svg>
           <span>Browse</span>
         </button>
       </div>
@@ -27,15 +36,22 @@
       </div>
       <div class="toolbar-right">
         <button id="startBtn" class="tb-btn accent" title="Start queue">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 2.5l9 5.5-9 5.5V2.5z" fill="currentColor"/></svg>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M4 2.5l9 5.5-9 5.5V2.5z" fill="currentColor" />
+          </svg>
           <span>Start</span>
         </button>
         <button id="stopBtn" class="tb-btn" title="Stop" disabled>
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="3" y="3" width="10" height="10" rx="1.5" fill="currentColor"/></svg>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <rect x="3" y="3" width="10" height="10" rx="1.5" fill="currentColor" />
+          </svg>
           <span>Stop</span>
         </button>
         <button id="clearBtn" class="tb-btn" title="Clear completed">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M5 2v1H3v1h10V3h-2V2H5zM4 5v8a1 1 0 001 1h6a1 1 0 001-1V5H4z" stroke="currentColor" stroke-width="1.2" fill="none"/></svg>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M5 2v1H3v1h10V3h-2V2H5zM4 5v8a1 1 0 001 1h6a1 1 0 001-1V5H4z" stroke="currentColor"
+              stroke-width="1.2" fill="none" />
+          </svg>
           <span>Clear</span>
         </button>
       </div>
@@ -50,7 +66,12 @@
         </div>
 
         <div id="dropZone" class="drop-zone">
-          <svg width="32" height="32" viewBox="0 0 32 32" fill="none"><path d="M16 4v17M9 14l7 7 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 22v4a2 2 0 002 2h20a2 2 0 002-2v-4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+            <path d="M16 4v17M9 14l7 7 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+              stroke-linejoin="round" />
+            <path d="M4 22v4a2 2 0 002 2h20a2 2 0 002-2v-4" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" />
+          </svg>
           <p>Drop video files here</p>
         </div>
 
@@ -58,7 +79,9 @@
 
         <div class="sidebar-foot">
           <div id="overallProgress" class="overall-bar" hidden>
-            <div class="prog-track"><div id="overallFill" class="prog-fill"></div></div>
+            <div class="prog-track">
+              <div id="overallFill" class="prog-fill"></div>
+            </div>
             <span id="overallText" class="prog-label">0 / 0</span>
           </div>
           <div class="manual-add">
@@ -71,7 +94,12 @@
       <!-- Main Content -->
       <main class="content">
         <div id="emptyState" class="empty-state">
-          <svg width="48" height="48" viewBox="0 0 48 48" fill="none"><rect x="6" y="10" width="36" height="28" rx="4" stroke="currentColor" stroke-width="2"/><path d="M20 20l4 4 4-4M24 24v-8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 30h20" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+            <rect x="6" y="10" width="36" height="28" rx="4" stroke="currentColor" stroke-width="2" />
+            <path d="M20 20l4 4 4-4M24 24v-8" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+              stroke-linejoin="round" />
+            <path d="M14 30h20" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+          </svg>
           <h2>Add videos to get started</h2>
           <p>Drag & drop files, or use the toolbar to browse</p>
         </div>
@@ -95,15 +123,26 @@
             <section class="settings-section">
               <div class="mode-tabs">
                 <button class="mode-tab active" data-mode="crop">
-                  <svg width="14" height="14" viewBox="0 0 14 14"><path d="M1 4V1h3M10 1h3v3M13 10v3h-3M4 13H1v-3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+                  <svg width="14" height="14" viewBox="0 0 14 14">
+                    <path d="M1 4V1h3M10 1h3v3M13 10v3h-3M4 13H1v-3" stroke="currentColor" stroke-width="1.4"
+                      stroke-linecap="round" stroke-linejoin="round" fill="none" />
+                  </svg>
                   Auto Crop
                 </button>
                 <button class="mode-tab" data-mode="delogo">
-                  <svg width="14" height="14" viewBox="0 0 14 14"><rect x="1" y="1" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M4 4l6 6M10 4l-6 6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+                  <svg width="14" height="14" viewBox="0 0 14 14">
+                    <rect x="1" y="1" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.4"
+                      fill="none" />
+                    <path d="M4 4l6 6M10 4l-6 6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
+                  </svg>
                   Delogo
                 </button>
                 <button class="mode-tab" data-mode="overlay">
-                  <svg width="14" height="14" viewBox="0 0 14 14"><rect x="1" y="1" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M5 7h4M7 5v4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+                  <svg width="14" height="14" viewBox="0 0 14 14">
+                    <rect x="1" y="1" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.4"
+                      fill="none" />
+                    <path d="M5 7h4M7 5v4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
+                  </svg>
                   Add Logo
                 </button>
               </div>
@@ -111,8 +150,10 @@
               <!-- Crop Settings -->
               <div id="cropSettings" class="fields-group">
                 <div class="field-row">
-                  <label class="field"><span>Crop Right (px)</span><input id="cropRight" type="number" min="0" value="240"></label>
-                  <label class="field"><span>Crop Bottom (px)</span><input id="cropBottom" type="number" min="0" value="120"></label>
+                  <label class="field"><span>Crop Right (px)</span><input id="cropRight" type="number" min="0"
+                      value="240"></label>
+                  <label class="field"><span>Crop Bottom (px)</span><input id="cropBottom" type="number" min="0"
+                      value="120"></label>
                 </div>
                 <label class="check-field">
                   <input id="scaleOutput" type="checkbox" checked>
@@ -149,7 +190,8 @@
                   <label class="field"><span>W</span><input id="logoW" type="number" min="1" value="200"></label>
                   <label class="field"><span>H</span><input id="logoH" type="number" min="1" value="200"></label>
                 </div>
-                <label class="field"><span>Opacity</span><input id="logoOpacity" type="range" min="0.05" max="1" step="0.05" value="1"><span id="opacityVal" class="range-val">100%</span></label>
+                <label class="field"><span>Opacity</span><input id="logoOpacity" type="range" min="0.05" max="1"
+                    step="0.05" value="1"><span id="opacityVal" class="range-val">100%</span></label>
                 <p class="hint">Drag logo on preview to position it</p>
               </div>
 
@@ -159,7 +201,11 @@
                 <div class="field-row">
                   <label class="field">
                     <span>Preset</span>
-                    <select id="preset"><option value="slow" selected>slow</option><option value="medium">medium</option><option value="fast">fast</option></select>
+                    <select id="preset">
+                      <option value="slow" selected>slow</option>
+                      <option value="medium">medium</option>
+                      <option value="fast">fast</option>
+                    </select>
                   </label>
                   <label class="field">
                     <span>CRF</span>
@@ -191,7 +237,21 @@
       <span id="statusIcon" class="status-dot"></span>
       <span id="statusText">Ready</span>
     </footer>
+    <!-- Video Player Modal -->
+    <div id="videoModal" class="video-modal" hidden>
+      <div class="video-modal-backdrop" id="videoBackdrop"></div>
+      <div class="video-modal-content">
+        <div class="video-modal-header">
+          <span id="videoTitle" class="video-modal-title">Video Preview</span>
+          <button id="videoCloseBtn" class="video-modal-close">✕</button>
+        </div>
+        <video id="videoPlayer" class="video-player" controls autoplay>
+          Your browser does not support video playback.
+        </video>
+      </div>
+    </div>
   </div>
   <script src="/app.js"></script>
 </body>
+
 </html>

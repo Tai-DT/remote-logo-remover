@@ -757,6 +757,97 @@ body {
   }
 }
 
+/* ── Video Modal ───────────────────────────────────────── */
+.video-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.video-modal[hidden] {
+  display: none !important;
+}
+
+.video-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(8px);
+}
+
+.video-modal-content {
+  position: relative;
+  z-index: 1;
+  width: min(90vw, 1100px);
+  max-height: 85vh;
+  background: var(--content-bg);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.video-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 0.5px solid var(--sep);
+}
+
+.video-modal-title {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.video-modal-close {
+  background: var(--pill-bg);
+  border: none;
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+}
+
+.video-modal-close:hover {
+  background: rgba(255, 59, 48, 0.15);
+  color: var(--red);
+}
+
+.video-player {
+  width: 100%;
+  max-height: calc(85vh - 50px);
+  background: #000;
+  outline: none;
+}
+
+/* ── Play Button in Job Card ───────────────────────────── */
+.play-btn {
+  background: var(--green);
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 8px;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+}
+
+.play-btn:hover {
+  background: #2db84e;
+  transform: scale(1.05);
+}
+
 /* ── Responsive ────────────────────────────────────────── */
 @media (max-width: 760px) {
   .sidebar {

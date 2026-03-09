@@ -23,6 +23,8 @@ const el = {
   logoX: $("logoX"), logoY: $("logoY"), logoW: $("logoW"), logoH: $("logoH"),
   logoOpacity: $("logoOpacity"), opacityVal: $("opacityVal"),
   preset: $("preset"), crf: $("crf"), outputPath: $("outputPath"),
+  videoModal: $("videoModal"), videoBackdrop: $("videoBackdrop"), videoPlayer: $("videoPlayer"),
+  videoTitle: $("videoTitle"), videoCloseBtn: $("videoCloseBtn"),
   applyAllBtn: $("applyAllBtn"), openOutputBtn: $("openOutputBtn"),
   statusText: $("statusText"), statusIcon: $("statusIcon"),
 };
@@ -99,16 +101,19 @@ function renderQueue() {
       <div class="job-card-top">
         <span class="job-card-name" title="${j.inputPath}">${basename(j.inputPath)}</span>
         <span class="${badgeCls}">${statusLabel}${j.status === "processing" ? ` ${j.progress}%` : ""}</span>
+        ${j.status === "done" ? `<button class="play-btn" data-path="${j.outputPath}" title="Play video">▶ Play</button>` : ""}
         <button class="remove-btn" data-id="${j.id}" title="Remove">✕</button>
       </div>
       ${meta ? `<span class="job-card-meta">${meta}</span>` : ""}
       ${progressHTML}
     `;
     card.addEventListener("click", (e) => {
-      if (e.target.closest(".remove-btn")) return;
+      if (e.target.closest(".remove-btn") || e.target.closest(".play-btn")) return;
       selectJob(j.id);
     });
     card.querySelector(".remove-btn").addEventListener("click", () => removeJob(j.id));
+    const playBtn = card.querySelector(".play-btn");
+    if (playBtn) playBtn.addEventListener("click", () => openVideoPlayer(j.outputPath, basename(j.inputPath)));
     el.queueList.appendChild(card);
   }
   // Overall progress
@@ -459,3 +464,23 @@ fetchJobs().then(autoSelectFirst);
 if (!isElectron) {
   el.browseLogoBtn.style.display = "none";
 }
+
+/* ── Video Player ──────────────────────────────────────── */
+function openVideoPlayer(videoPath, title) {
+  el.videoTitle.textContent = title || "Video Preview";
+  el.videoPlayer.src = `/api/video?path=${encodeURIComponent(videoPath)}`;
+  el.videoModal.hidden = false;
+  el.videoPlayer.play().catch(() => { });
+}
+
+function closeVideoPlayer() {
+  el.videoPlayer.pause();
+  el.videoPlayer.src = "";
+  el.videoModal.hidden = true;
+}
+
+el.videoCloseBtn.addEventListener("click", closeVideoPlayer);
+el.videoBackdrop.addEventListener("click", closeVideoPlayer);
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape" && !el.videoModal.hidden) closeVideoPlayer();
+});
