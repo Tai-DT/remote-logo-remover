@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """
 Frame-by-frame inpainting to remove watermarks from video.
-Algorithm: scikit-image biharmonic (primary) → OpenCV Telea (fallback).
-Pipes raw frames: ffmpeg-decode → (Python inpaint ROI) → ffmpeg-encode.
+Pipeline: ffmpeg decode → Python (modify only ROI) → ffmpeg encode.
+
+Quality: CRF 10 by default (near-lossless, ~4× better than the old CRF 16).
+Only the small ROI crop is processed by Python; the rest passes through unchanged.
 ffmpeg encode's stderr is inherited so time= progress reaches server.js.
 
 Args: sys.argv[1] = JSON string with keys:
@@ -23,20 +25,11 @@ def read_exact(pipe, n):
 def make_inpaint_fn(mask_uint8):
     """
     Return an inpaint function: (crop_bgr_uint8) → inpainted_bgr_uint8.
-    Priority: OpenCV ShiftMap (exemplar/patch-based, photorealistic)
-             → OpenCV FSR_FAST (frequency-selective reconstruction)
-             → scikit-image biharmonic (smooth PDE)
-             → OpenCV Telea (fast fallback)
-    ShiftMap finds real texture patches from surrounding pixels and copies
-    them seamlessly — produces the most natural-looking results.
-    Note: xphoto.inpaint mask is INVERTED: 0=inpaint area, 255=valid area.
-          ShiftMap requires CIELab colorspace input.
+    Priority: OpenCV ShiftMap → FSR_FAST → biharmonic → Telea
     """
     import cv2, numpy as np
-    # xphoto mask convention is opposite of cv2.inpaint
     mask_xphoto = 255 - mask_uint8
     try:
-        # Warm-up probe to confirm ShiftMap API works
         probe_bgr = np.zeros((8, 8, 3), dtype=np.uint8)
         probe_lab = cv2.cvtColor(probe_bgr, cv2.COLOR_BGR2Lab)
         probe_m   = np.full((8, 8), 255, dtype=np.uint8); probe_m[3:5, 3:5] = 0
@@ -91,7 +84,7 @@ def run():
     fps    = str(cfg.get("fps", "30"))
     ff     = cfg["ffmpeg"]
     preset = cfg.get("preset", "slow")
-    crf    = str(cfg.get("crf", 16))
+    crf    = str(cfg.get("crf", 10))
 
     # ── ROI: crop with generous padding so inpainting has context ──────────────
     PAD = max(30, max(w, h) // 2)
@@ -99,33 +92,59 @@ def run():
     cx1 = min(fw, x + w + PAD); cy1 = min(fh, y + h + PAD)
     cw  = cx1 - cx0;  ch = cy1 - cy0
 
+    # Logo sub-region within the crop (where text is expected)
+    lx0 = x - cx0; ly0 = y - cy0
+
     # Binary mask (white = region to inpaint) in the cropped coordinate space
     mask = np.zeros((ch, cw), dtype=np.uint8)
-    mask[y - cy0 : y - cy0 + h, x - cx0 : x - cx0 + w] = 255
+    mask[ly0 : ly0 + h, lx0 : lx0 + w] = 255
 
-    # Select inpainting algorithm once (before frame loop)
+    print(f"[pipeline] single-pipe mode: ROI {cw}x{ch} at ({cx0},{cy0}), "
+          f"full frame {fw}x{fh}, crf={crf}", file=sys.stderr, flush=True)
+
+    # ── Select inpainting algorithm ───────────────────────────────────────────
     method = cfg.get("method", "reconstruct")
-    if method == "blur":
+    if method == "smart":
         import cv2
-        # Gaussian blur strength: kernel size proportional to watermark size
-        ksize = max(21, (max(w, h) // 4) | 1)  # must be odd
+        LUMA_THR  = int(cfg.get("lumaThr", 190))
+        SAT_THR   = int(cfg.get("satThr", 35))
+        DILATE_PX = int(cfg.get("dilatePx", 2))
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (DILATE_PX*2+1, DILATE_PX*2+1))
+        base_inpaint = make_inpaint_fn(mask)
+        print(f"[inpaint] using SMART text detection (luma>{LUMA_THR}, sat<{SAT_THR}, dilate={DILATE_PX}px)",
+              file=sys.stderr, flush=True)
+        def inpaint(crop):
+            roi = crop[ly0:ly0+h, lx0:lx0+w]
+            roi_f = roi.astype(np.float32)
+            b, g, r = roi_f[:,:,0], roi_f[:,:,1], roi_f[:,:,2]
+            luma = 0.114 * b + 0.587 * g + 0.299 * r
+            sat  = np.max(roi_f, axis=2) - np.min(roi_f, axis=2)
+            text_mask_roi = ((luma >= LUMA_THR) & (sat <= SAT_THR)).astype(np.uint8) * 255
+            text_mask_roi = cv2.dilate(text_mask_roi, kernel, iterations=1)
+            dyn_mask = np.zeros((ch, cw), dtype=np.uint8)
+            dyn_mask[ly0:ly0+h, lx0:lx0+w] = text_mask_roi
+            if cv2.countNonZero(dyn_mask) == 0:
+                return crop
+            return cv2.inpaint(crop, dyn_mask, inpaintRadius=3, flags=cv2.INPAINT_TELEA)
+    elif method == "blur":
+        import cv2
+        ksize = max(21, (max(w, h) // 4) | 1)
         print(f"[inpaint] using Gaussian blur (kernel={ksize})", file=sys.stderr, flush=True)
         def inpaint(crop):
             blurred = cv2.GaussianBlur(crop, (ksize, ksize), 0)
             result  = crop.copy()
-            lx0 = x - cx0; ly0 = y - cy0
             result[ly0:ly0+h, lx0:lx0+w] = blurred[ly0:ly0+h, lx0:lx0+w]
             return result
     else:
         inpaint = make_inpaint_fn(mask)
 
-    # ── Decode subprocess ──────────────────────────────────────────────────────
+    # ── Decode full frame ─────────────────────────────────────────────────────
     dec = sp.Popen(
         [ff, "-i", inp, "-f", "rawvideo", "-pix_fmt", "bgr24", "pipe:1"],
         stdout=sp.PIPE, stderr=sp.DEVNULL
     )
 
-    # ── Encode subprocess ──────────────────────────────────────────────────────
+    # ── Encode full frame (same pipe = guaranteed sync) ───────────────────────
     # stderr=None → inherit Python's stderr → ffmpeg progress reaches server.js
     enc = sp.Popen(
         [ff, "-y",
@@ -139,7 +158,7 @@ def run():
         stdin=sp.PIPE, stderr=None
     )
 
-    # ── SIGTERM: clean up subprocesses ─────────────────────────────────────────
+    # ── SIGTERM: clean up subprocesses ────────────────────────────────────────
     def on_term(sig, frame):
         try: enc.kill()
         except Exception: pass
@@ -148,7 +167,7 @@ def run():
         sys.exit(1)
     signal.signal(signal.SIGTERM, on_term)
 
-    # ── Frame loop ─────────────────────────────────────────────────────────────
+    # ── Frame loop: only modify ROI, rest passes through unchanged ────────────
     frame_sz = fw * fh * 3
     try:
         while True:
@@ -179,7 +198,6 @@ if __name__ == "__main__":
     try:
         run()
     except ImportError as e:
-        # Exit code 2 = cv2/numpy not available, server falls back to ffmpeg delogo
         print(f"ImportError: {e}", file=sys.stderr)
         sys.exit(2)
     except Exception as e:

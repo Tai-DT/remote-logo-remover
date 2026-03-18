@@ -175,20 +175,28 @@ const PRESET_PROFILES = [
     delogo: { x: 3591, y: 2012, w: 220, h: 103 },
   },
   {
+    id: "portrait-720p",
+    label: "Dọc 720x1280",
+    width: 720,
+    height: 1280,
+    crop: { right: 80, bottom: 52, scaleOutput: true },
+    delogo: { x: 637, y: 1230, w: 67, h: 32 },
+  },
+  {
     id: "portrait-1080p",
     label: "Dọc 1080x1920",
     width: 1080,
     height: 1920,
-    crop: { right: 60, bottom: 120, scaleOutput: true },
-    delogo: { x: 1008, y: 1786, w: 48, h: 106 },
+    crop: { right: 120, bottom: 78, scaleOutput: true },
+    delogo: { x: 956, y: 1845, w: 100, h: 48 },
   },
   {
     id: "portrait-4k",
     label: "Dọc 2160x3840",
     width: 2160,
     height: 3840,
-    crop: { right: 120, bottom: 240, scaleOutput: true },
-    delogo: { x: 2016, y: 3572, w: 96, h: 212 },
+    crop: { right: 240, bottom: 156, scaleOutput: true },
+    delogo: { x: 1911, y: 3690, w: 201, h: 96 },
   },
 ];
 
@@ -226,12 +234,17 @@ function scaleCropPreset(preset, w, h, baseW, baseH) {
 }
 
 function scaleDelogoPreset(preset, w, h, baseW, baseH) {
-  return {
-    x: scaleFromBase(preset.x, w, baseW),
-    y: scaleFromBase(preset.y, h, baseH),
-    w: scaleFromBase(preset.w, w, baseW),
-    h: scaleFromBase(preset.h, h, baseH),
-  };
+  const BAND = 2; // safety margin for ffmpeg delogo band padding
+  let sx = scaleFromBase(preset.x, w, baseW);
+  let sy = scaleFromBase(preset.y, h, baseH);
+  let sw = scaleFromBase(preset.w, w, baseW);
+  let sh = scaleFromBase(preset.h, h, baseH);
+  // Clamp to ensure delogo region + band stays within frame
+  sw = Math.min(sw, w - BAND);
+  sh = Math.min(sh, h - BAND);
+  sx = Math.max(BAND, Math.min(sx, w - sw - BAND));
+  sy = Math.max(BAND, Math.min(sy, h - sh - BAND));
+  return { x: sx, y: sy, w: Math.max(1, sw), h: Math.max(1, sh) };
 }
 
 function buildPresetBundle(w, h) {
@@ -368,12 +381,15 @@ async function generatePreview(inputPath, dur, previewDir) {
 function buildVideoFilter(mode, body, meta) {
   mode = normalizeJobMode(mode);
   if (mode === "delogo") {
-    const x = clampInt(body.delogoX, 0), y = clampInt(body.delogoY, 0);
-    const w = clampInt(body.delogoW, 0), h = clampInt(body.delogoH, 0);
+    const BAND = 2; // ffmpeg delogo uses band=1 by default; add safety margin
+    let x = clampInt(body.delogoX, 0), y = clampInt(body.delogoY, 0);
+    let w = clampInt(body.delogoW, 0), h = clampInt(body.delogoH, 0);
     if (w <= 0 || h <= 0) throw new Error("Vùng xoá logo phải có chiều rộng và chiều cao lớn hơn 0.");
-    if (x < 0 || y < 0 || x + w > meta.width || y + h > meta.height) {
-      throw new Error("Vùng xoá logo vượt ra ngoài khung hình video.");
-    }
+    // Clamp delogo region to stay within frame with band padding safety
+    w = Math.min(w, meta.width - BAND);
+    h = Math.min(h, meta.height - BAND);
+    x = Math.max(BAND, Math.min(x, meta.width - w - BAND));
+    y = Math.max(BAND, Math.min(y, meta.height - h - BAND));
     return `delogo=x=${x}:y=${y}:w=${w}:h=${h}:show=0`;
   }
   if (mode === "crop") {
@@ -423,7 +439,7 @@ function createJob(inputPath, settings) {
     id, inputPath, outputPath: makeOutputPath(inputPath),
     status: "pending", progress: 0,
     metadata: null, previewUrl: null, cropPreset: null, delogoPreset: null, presetProfile: null,
-    settings: { mode: "delogo", crf: 16, preset: "slow", scaleOutput: true, cropRight: null, cropBottom: null, delogoX: null, delogoY: null, delogoW: null, delogoH: null, delogoMethod: "reconstruct", logoPath: "", logoX: 0, logoY: 0, logoW: 200, logoH: 200, logoOpacity: 1, ...settings, mode: normalizeJobMode(settings.mode) },
+    settings: { mode: "delogo", crf: 10, preset: "slow", scaleOutput: true, cropRight: null, cropBottom: null, delogoX: null, delogoY: null, delogoW: null, delogoH: null, delogoMethod: "smart", logoPath: "", logoX: 0, logoY: 0, logoW: 200, logoH: 200, logoOpacity: 1, ...settings, mode: normalizeJobMode(settings.mode) },
     error: null, result: null, addedAt: Date.now(),
   };
   jobs.set(id, job);
@@ -537,7 +553,7 @@ async function processJob(job) {
           fps:         job.metadata.frameRate || "30",
           preset:      isNonEmptyString(job.settings.preset) ? job.settings.preset : "slow",
           crf:         clampInt(job.settings.crf, 16),
-          method:      job.settings.delogoMethod === "blur" ? "blur" : "reconstruct",
+          method:      ["blur", "smart"].includes(job.settings.delogoMethod) ? job.settings.delogoMethod : "reconstruct",
         });
         cmd  = pythonCmd.cmd;
         args = [...pythonCmd.args, scriptPath, scriptArg];
@@ -644,7 +660,7 @@ function createServerApp(options = {}) {
       const mode = normalizeJobMode(req.body.mode || "delogo");
       const settings = {
         mode,
-        crf: clampInt(req.body.crf, 16),
+        crf: clampInt(req.body.crf, 10),
         preset: isNonEmptyString(req.body.preset) ? req.body.preset : "slow",
         scaleOutput: req.body.scaleOutput !== false,
         cropRight: isUnset(req.body.cropRight) ? null : clampInt(req.body.cropRight, 0),

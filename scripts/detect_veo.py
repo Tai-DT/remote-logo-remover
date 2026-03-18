@@ -33,11 +33,11 @@ def detect_in_roi(raw, rw, rh):
         lumas[i] = 0.299*rv + 0.587*gv + 0.114*bv
         sats[i]  = max(rv, gv, bv) - min(rv, gv, bv)
     sorted_l = sorted(lumas)
-    # Use 97th-percentile threshold: only the very brightest whites remain.
-    # Veo text = bright white (luma 240-255, sat 30-50).
-    # Sky = warm golden (luma 180-230, sat 60-120) → filtered out by sat<=52.
-    thr_l = max(sorted_l[int(n * 0.97)], 175.0)
-    thr_s = 52
+    # Fixed thresholds tuned from pixel analysis of real Veo watermarks.
+    # Veo text = bright white (luma 200-210, sat 14-20).
+    # Using fixed threshold avoids false positives from bright backgrounds.
+    thr_l = 195.0
+    thr_s = 35
     min_x, min_y = rw, rh
     max_x, max_y = -1, -1
     for i in range(n):
@@ -68,24 +68,24 @@ def detect_veo(path, ffmpeg, ffprobe):
     rw = (width  - rx) & ~1; rh = (height - ry) & ~1
     if rw < 10 or rh < 10:
         return {"error": "ROI too small", "videoWidth": width, "videoHeight": height}
-    union = None; valid = 0
+    boxes = []; valid = 0
     for ts in timestamps:
         raw  = extract_roi(path, ffmpeg, ts, rx, ry, rw, rh, is_img)
         bbox = detect_in_roi(raw, rw, rh)
         if bbox:
             valid += 1
-            bx0, by0, bx1, by1 = bbox
-            if union is None: union = [bx0, by0, bx1, by1]
-            else:
-                union[0]=min(union[0],bx0); union[1]=min(union[1],by0)
-                union[2]=max(union[2],bx1); union[3]=max(union[3],by1)
-    if union is None:
+            boxes.append(bbox)
+    if not boxes:
         return {"error":"Watermark not found","videoWidth":width,"videoHeight":height}
-    P = 8
-    ax = max(0,    rx + union[0] - P)
-    ay = max(0,    ry + union[1] - P)
-    aw = min(width  - ax, union[2]-union[0] + P*2 + 1)
-    ah = min(height - ay, union[3]-union[1] + P*2 + 1)
+    # Use median of each coordinate to reject outlier frames (e.g. bright backgrounds)
+    boxes.sort(key=lambda b: (b[2]-b[0]) * (b[3]-b[1]))  # sort by area
+    mid = len(boxes) // 2
+    best = boxes[mid]  # median-area box
+    P = 4
+    ax = max(0,    rx + best[0] - P)
+    ay = max(0,    ry + best[1] - P)
+    aw = min(width  - ax, best[2]-best[0] + P*2 + 1)
+    ah = min(height - ay, best[3]-best[1] + P*2 + 1)
     return {"x":ax,"y":ay,"w":aw,"h":ah,"videoWidth":width,"videoHeight":height,"framesAnalyzed":valid}
 
 if __name__ == "__main__":
